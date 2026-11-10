@@ -1,0 +1,14 @@
+/build*/
+/out/
+/.venv/
+/.deps/
+/__pycache__/
+**/__pycache__/
+*.pyc
+*.log
+*.elf
+*.map
+*.dis
+*.bin
+/.vscode/
+/CMakeUserPresets.json
