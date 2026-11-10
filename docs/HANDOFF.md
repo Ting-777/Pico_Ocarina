@@ -26,11 +26,15 @@ ctest --test-dir out/native-full -C Debug --output-on-failure
 
 完整用户图片已转录到`docs/FULL_FINGERING_REFERENCE.md`及`profiles/oot_user_image_reference.json`：包括19个音的26种按法、替代指法和报告编码。请先区分参考中的19音与当前代码实现的10音，不要声称加载JSON功能已经存在。
 
-## 下一项建议任务
+## 用户已明确的架构与下一项任务
 
-实现电脑端可配置的MIDI→标准演奏时间线工具。输入轨道、片段、调高、tempo比例、复音策略与指法profile；输出审计CSV、试听MIDI和设备中间格式。复用原文件第27小节低尾句与第51/59小节高变体做集成回归。此阶段不要重写USB描述符，也不要自动折八度。
+必须分开：**MIDI→主旋律配置文件**在电脑端，**配置文件→实际手柄演奏**在Pico固件内部。第一步可以固定程序或AI辅助，但第二步不是生成C++头文件再重编译，而是固件的运行时功能。
 
-完成后再实现设备歌曲加载与Windows上传，最终达到不重编译即可换曲。进入配置模式的手势、上传协议和Flash布局还没有被用户确认或实测，不应假设已经定案。
+先读`MELODY_FILE_FORMAT.md`和`schemas/melody-v1.schema.json`。仓库已提供完整/短版两个`melody_*_v1_proposed.json`样例，可直接作为开发输入，不必等通用MIDI导入器完成。
+
+下一项优先实现：有界文件解析与语义校验、`LoadedSong`播放器、固件内置19音profile。之后实现配置模式、上传CLI和Flash原子保存，证明同一UF2可接收两个不同配置并断电保留，离开电脑仍可按BOOTSEL播放。已有UF2尚不支持这些文件，不能仅上传样例JSON就宣称功能完成。
+
+再完善第一步的通用MIDI导入/AI辅助与GUI。电脑端生成最终演奏音高、绝对起音/松键时间；固件只按文件执行，不重复移调或再扣释放时间。试听与设备事件必须从同一文件派生。具体顺序见`CONFIGURABLE_DESIGN.md`。
 
 ## 已验证与未验证
 
@@ -40,4 +44,4 @@ ctest --test-dir out/native-full -C Debug --output-on-failure
 
 ## 可直接交给Codex的提示词
 
-> 阅读AGENTS.md、README和docs/HANDOFF.md。将本工程逐步开发为Windows可配置的陶笛播放器，最终支持不重新编译即可上传歌曲与配置。先实现电脑端通用MIDI导入、指法profile及统一时间线；保留现有示例的全部回归点，不自动折八度。先运行full/first的native测试，再按docs/CONFIGURABLE_DESIGN.md分阶段实施。完成每阶段后报告代码与实机各自的验证范围。
+> 阅读AGENTS.md、README和docs/HANDOFF.md。将本工程逐步开发为Windows可配置的陶笛播放器，最终支持不重新编译即可上传歌曲与配置。优先实现固件内部读取主旋律配置文件、校验、19音指法映射和独立播放，再做文件上传及Flash保存；换曲不重新编译。第一步的MIDI转换可以固定程序或AI辅助，后做通用工具/GUI。保留现有示例回归，不自动折八度。先运行full/first的native测试，再按docs/CONFIGURABLE_DESIGN.md分阶段实施。完成每阶段后报告代码与实机各自的验证范围。

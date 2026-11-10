@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pico Ocarina melody v1 (proposed, not implemented by firmware v1.1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "schema_version", "fingering_profile", "countdown_us", "duration_us", "notes"],
+  "properties": {
+    "format": {"const": "pico-ocarina-melody"},
+    "schema_version": {"type": "integer", "const": 1},
+    "title": {"type": "string", "maxLength": 80},
+    "fingering_profile": {"const": "oot-user-image-reference-v1"},
+    "countdown_us": {"type": "integer", "minimum": 0, "maximum": 10000000},
+    "duration_us": {"type": "integer", "minimum": 1, "maximum": 3600000000},
+    "notes": {
+      "type": "array", "minItems": 1, "maxItems": 4096,
+      "items": {
+        "type": "array", "minItems": 3, "maxItems": 3,
+        "prefixItems": [
+          {"type": "integer", "minimum": 0, "maximum": 3600000000},
+          {"type": "integer", "minimum": 1, "maximum": 3600000000},
+          {"type": "integer", "minimum": 71, "maximum": 89}
+        ],
+        "items": false
+      }
+    },
+    "metadata": {"type": "object", "additionalProperties": true}
+  }
+}

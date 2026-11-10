@@ -59,7 +59,9 @@ ctest --test-dir out/native -C Debug --output-on-failure
 
 先读 [AGENTS.md](AGENTS.md) 和 [开发交接](docs/HANDOFF.md)。后续目标是：**在 Windows 上导入 MIDI、选择主旋律轨、调整调高/速度/指法，并将歌曲及配置上传到 Pico，日常换曲不必重新编译固件**。
 
-这部分尚未实现；现有的 `full/first` 是构建时示例选择，不等于已经具备运行时配置。推荐方案和验收条件见 [配置化开发设计](docs/CONFIGURABLE_DESIGN.md)。
+目标链路明确分成两步：**电脑/AI将MIDI变成主旋律配置文件 → Pico固件内部读取文件、按音高查指法并定时发送手柄输入**。配置保存到板子后，离开电脑也能演奏。
+
+优先实现板内的第二步，而不是先做大型转换界面。文件契约与样例见 [配置文件格式](docs/MELODY_FILE_FORMAT.md)；设计和验收见 [配置化开发设计](docs/CONFIGURABLE_DESIGN.md)。这些尚未实现；`full/first`仍只是构建时示例选择，现有UF2不能读取新配置文件。
 
 ## 工程目录
 
@@ -70,6 +72,7 @@ ctest --test-dir out/native -C Debug --output-on-failure
 | `src/pro_controller.*` | 有线Pro手柄初始化与输入报告；不依赖GP2040-CE工程 |
 | `tools/` | 示例歌曲表、试听生成与独立MIDI核验 |
 | `examples/queens_road_east/` | 原MIDI、解析人声轨、逐音表、试听和原调对照 |
+| `schemas/` | 提议中的主旋律文件格式；设备端读取尚未实现 |
 | `profiles/` | 完整用户图片指法参考；尚未由固件加载 |
 | `tests/` | 可在桌面运行的协议与演奏回归测试 |
 | `firmware/` | 已编译v1.1 UF2与SHA-256 |

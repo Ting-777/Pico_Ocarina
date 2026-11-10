@@ -4,7 +4,7 @@ This repository is a standalone Raspberry Pi Pico/RP2040 USB controller firmware
 
 ## Current user goal
 
-Develop a configurable ocarina player usable from Windows. Preserve one-button continuous playback, independent left-stick and D-pad modifiers, source MIDI phrasing, and no per-note octave folding. Eventually allow song/config uploads without recompilation. The configurable UI/upload/storage features are planned, not already implemented.
+The user explicitly requires TWO independent stages: (1) a PC program or AI-assisted process converts MIDI into a melody configuration file; (2) the Pico firmware itself loads/validates that file, maps its pitches to fingerings, schedules and sends controller input. Prioritize implementing stage2 using the proposed example files before investing in a generic importer or GUI. Saved songs must play with the PC disconnected and changing songs must not require rebuilding UF2. Preserve one-button continuous playback, independent stick/D-pad modifiers and source phrasing. Runtime loading/upload/storage are planned, not already implemented by v1.1.
 
 ## Keep these invariants
 
@@ -32,6 +32,10 @@ Repeat with a separate `out/native-first` directory and `OCARINA_SONG_VARIANT=fi
 Firmware: Pico SDK2.1.1 plus TinyUSB submodule, ARM GCC14.2.1 (validated), CMake and Ninja. Use `scripts/build.ps1` on Windows or `scripts/build.sh` on Linux; see `docs/BUILDING.md`.
 
 Generated `song.h`, MIDI and CSV go under the build/output directory. Do not add them under `src/` or mutate tracked examples during builds. Keep `firmware/` binaries and checksums synchronized when intentionally updating a published baseline.
+
+## Runtime configuration contract
+
+Read `docs/MELODY_FILE_FORMAT.md` and `schemas/melody-v1.schema.json`. Proposed samples are `examples/queens_road_east/melody_full_v1_proposed.json` and `melody_first_v1_proposed.json`. They contain FINAL playback pitches and absolute on/off times in microseconds, not source MIDI or C++ code. The firmware must not transpose or shorten release times again. `metadata` is audit-only. Implement bounded device-side validation, playback from loaded events, full19-note profile, persistent storage and file upload; only then claim runtime configuration support. The schema and samples currently describe a target interface, not existing firmware behavior.
 
 ## Scope of the initial import
 
