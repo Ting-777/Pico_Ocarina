@@ -31,7 +31,7 @@ for bar,expected in [(27,[77,74,74,72,74]),(51,[89,86,86,84,86]),(59,[89,86,86,8
  a=[r[2] for r,n in zip(rows,notes) if (bar-1)*4*PPQ<=n['t']<bar*4*PPQ]
  if a:assert a==expected,(bar,a)
 TOTAL=round(Fraction((end_tick-start)*TEMPO,PPQ))
-text='#pragma once\n#include <cstdint>\nstruct SongNote { uint32_t on, off; uint8_t pitch; };\n'
+text='#pragma once\n#include "melody.h"\n'
 text+=f'constexpr uint32_t SONG_DURATION_US={TOTAL};\nconstexpr bool SONG_FULL={"true" if args.variant=="full" else "false"};\nconstexpr SongNote SONG[]={{\n'
 text+=''.join(f' {{{on},{off},{p}}},\n' for on,off,p,_ in rows)+'};\nconstexpr unsigned SONG_COUNT=sizeof(SONG)/sizeof(SONG[0]);\n'
 (OUT/'song.h').write_text(text)
@@ -54,3 +54,7 @@ def midi(name,shift):
  (OUT/name).write_bytes(b'MThd'+struct.pack('>IHHH',6,0,1,960)+b'MTrk'+struct.pack('>I',len(data))+data)
 midi(f'preview_{args.variant}_F_v1_1.mid',5);midi(f'reference_{args.variant}_original_C_v1_1.mid',0)
 print(args.variant,len(notes),'notes;',len(raw)-len(notes),'lower octave doubles omitted; duration',TOTAL/1e6,'range',min(r[2] for r in rows),max(r[2] for r in rows))
+
+# A built-in demonstration remains available; it uses the same runtime parser.
+config=(ROOT/f'examples/queens_road_east/melody_{args.variant}_v1_proposed.json').read_bytes()
+(OUT/'fallback_melody.h').write_text('#pragma once\nconstexpr unsigned char FALLBACK_MELODY[]={'+','.join(str(b) for b in config)+'};\n')

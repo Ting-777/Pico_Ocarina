@@ -1,6 +1,6 @@
-# 主旋律文件v1：电脑与固件之间的契约（开发草案）
+# 主旋律文件v1：电脑与固件之间的契约
 
-此格式是接下来要实现的稳定接口，不是当前v1.1已支持的格式。JSON Schema见 [melody-v1.schema.json](../schemas/melody-v1.schema.json)。
+1.2-dev源码已实现此接口的板内校验与加载；发布v1.1 UF2不支持。验证边界与上传说明见 [运行时配置](RUNTIME_CONFIGURATION.md)。JSON Schema见 [melody-v1.schema.json](../schemas/melody-v1.schema.json)。
 
 ## 字段
 
@@ -15,7 +15,7 @@
 | notes | 1–4096个三元组 | 每项`[on_us, off_us, pitch]` |
 | metadata | 可选对象 | 来源审计，不作为演奏指令 |
 
-开始/松键时间是整数微秒；音高是整数MIDI71–89（B4–F6）。文件UTF-8字节数不超过65536。JSON中的数字不能通过浮点近似、负数或字符串强制转换蒙混通过。未知顶层字段由v1拒绝，避免AI拼错字段后悄悄失效；`metadata`中允许扩展审计字段。
+开始/松键时间是整数微秒；音高是整数MIDI71–89（B4–F6）。文件UTF-8字节数不超过65536。设备端要求非负十进制整数字面量，不接受小数、指数、负数或字符串强制转换。metadata对象最多16层嵌套容器；JSON不带BOM。未知顶层字段由v1拒绝，避免AI拼错字段后悄悄失效；`metadata`中允许扩展审计字段。
 
 ## 固件必须额外执行的语义校验
 

@@ -2,7 +2,7 @@
 
 本页逐项转录本项目用户提供的 **“Ocarina of Time Remake - Ocarina guide”** 图片，覆盖 **B4–F6的19个半音、26种按法**。图片署名：Guide by Tiny Violet；button icons by Zacksly。
 
-这是对用户图片的转录，尚未在游戏中实测。原版v1.1代码只实现当前示例需要的10个音；下表不能被当作已经扩展了固件功能。完整的机器可读数据见 [oot_user_image_reference.json](../profiles/oot_user_image_reference.json)，当前固件**没有加载这个JSON**。
+这是对用户图片的转录，尚未在游戏中实测。原版v1.1代码只实现当前示例需要的10个音；下表不能被当作已经扩展了固件功能。完整的机器可读数据见 [oot_user_image_reference.json](../profiles/oot_user_image_reference.json)，1.2-dev已将19音确定按法集成到内置C++表并逐项核对；C6保留v1.1按法2，其余选按法1。固件不动态加载这个参考JSON。
 
 ## 符号
 
@@ -76,6 +76,6 @@ out[8] = (ly >> 4) & 0xff;
 
 先将这个参考profile转换成受校验的指法表，或补全`fingering()`，再允许导入器接受其余9个音。JSON里`v1_1_variant_index`从0计数：C6为1，即图中第二套；其他已实现音均为0。`implemented_in_v1_1=false`不是按法错误，而是代码目前没有这个分支。
 
-当前`fingering()`遇到缺失音会返回中立状态。通用导入必须显式检查缺指法并报错；不能仅检查B4–F6范围就宣称都可演奏，也不能通过静默折八度绕过缺失。
+v1.1的`fingering()`遇到缺失音会返回中立状态。1.2-dev的`lookup_fingering()`显式报告缺指法，文件加载会拒绝该音。通用导入必须显式检查缺指法并报错；不能仅检查B4–F6范围就宣称都可演奏，也不能通过静默折八度绕过缺失。
 
 待实机验证的范围包括所有19个音、26套组合、修饰同时生效和音符间切换；将来有测试结果时，应逐套记录，不能从一个按法成功推定其替代按法也已通过。

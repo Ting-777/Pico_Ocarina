@@ -1,5 +1,7 @@
 # 配置化方案：MIDI → 主旋律文件 → Pico演奏
 
+截至2026-11-10，阶段1–3已有1.2-dev实现与native验证；ARM构建及测试UF2核验通过，实机验收仍待完成。实现详情、操作与限制见 [RUNTIME_CONFIGURATION.md](RUNTIME_CONFIGURATION.md)。下文保留设计要求，v1.1发布固件行为不变。
+
 ## 已明确的职责边界
 
 用户要的是两步流水线：
@@ -44,7 +46,7 @@ MIDI中的音高、起音、时长和tempo map本来就是确定数据，固定�
 
 每个音是`[开始微秒, 松键微秒, 演奏MIDI音高]`，时间相对歌曲起点，单位全部为微秒。81是A5，不是简谱数字，也不是某个手柄按钮。
 
-详细契约见 [配置文件格式](MELODY_FILE_FORMAT.md) 与 `schemas/melody-v1.schema.json`。该v1契约是开发目标，尚无设备端实现。
+详细契约见 [配置文件格式](MELODY_FILE_FORMAT.md) 与 `schemas/melody-v1.schema.json`。该v1契约已由1.2-dev设备代码实现，真实固件构建已通过，尚待实机验收。
 
 关键约定：
 
@@ -76,7 +78,7 @@ Pico不能直接读取Windows上的某个路径。需要把`melody.json`的字�
 
     python upload_melody.py melody.json --port COM5
 
-这只是目标用法，脚本目前还不存在。MVP可采用**独立USB配置模式 + CDC串口协议**，演奏模式保持现有Pro HID描述符。不要未经实测就把CDC加入常驻复合设备并宣称Switch兼容。
+这只是目标用法，脚本已在1.2-dev中实现；真实串口上传尚待实测。MVP可采用**独立USB配置模式 + CDC串口协议**，演奏模式保持现有Pro HID描述符。不要未经实测就把CDC加入常驻复合设备并宣称Switch兼容。
 
 上传至少区分开始、分块数据、验证、提交、状态和中止，并包含长度及CRC/摘要。线上的精确命令和进入配置模式的手势待实现时确定；现有BOOTSEL短按播放、长按1秒L+R、插电前按住进ROM刷机的行为不能被不加说明地覆盖。
 

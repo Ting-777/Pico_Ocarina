@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Pico Ocarina melody v1 (proposed, not implemented by firmware v1.1)",
+  "title": "Pico Ocarina melody v1 (implemented in source 1.2-dev)",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "schema_version", "fingering_profile", "countdown_us", "duration_us", "notes"],

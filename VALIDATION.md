@@ -27,3 +27,41 @@
 ## 运行时配置规划补充
 
 新增v1文件契约草案、JSON Schema及两份配置样例。样例逐音取自已核验CSV：完整572音、短版132音；检查文件小于64KiB、起止顺序、至少40ms释放、总时长及音域约束。它们是固件下一阶段的输入样例，当前固件没有配置读取/上传/存储实现，本次未更改UF2或声称新增实机能力。
+
+
+## 2026-11-10：配置化源码1.2-dev，Windows native
+
+测试环境：Windows、Python3.9.0、CMake4.4.4、Ninja1.13.2、MinGW GCC16.1.0；Debug，C++17，-Wall -Wextra -Werror，assert开启。本次没有运行ASan/UBSan，不沿用历史结果作为新代码的sanitizer证据。
+
+按用户要求先测原基线：full和first各2/2通过。首次严格编译遇GCC16的non-c-typedef-for-linkage警告，基线验证时暂降为警告；随后为3个已有结构体加名（无字段/字节布局变化），恢复严格编译通过。
+
+阶段1：两个JSON样例加载后事件逐项等于原生成表，572/132个音；测试格式/版本/profile/未知及重复字段、长度、UTF-8/转义、非整数、越界、乱序、重叠、40ms释放、metadata深度、截断和2000次确定性字节变异；失败保留旧歌。metadata不执行移调字段。
+
+阶段2：LoadedSong绝对调度，逐个on/off前后微秒边界、倒数、64位时钟、停止/结束回中；19音完整ControlState与参考JSON逐项一致，C6保留原按法。原低尾句与高变体、577→572主旋律、MIDI逐音和独立D-pad/摇杆回归保持通过。
+
+阶段3：288种擦除/写页中断模拟（含部分页与头记录）均恢复到旧歌或完整新歌；损坏头/文件CRC回退，64KiB文件保存成功。实际Python上传函数对同一个native设备程序先上传full再上传first，错误文件保持旧摘要，进程退出重启后Flash镜像回读一致。行接收覆盖超长、非法控制字节、分片、重发、偏移、CRC、VALIDATE/COMMIT状态。
+
+最终测试项（full/first各6/6）：
+
+- store_upload
+- windows_cli_protocol
+- melody_loading_playback
+- full_profile_reference
+- protocol_player
+- midi_source_correspondence
+
+这证明的是设备逻辑和CLI协议的软件行为；模拟器不模拟USB枚举、Flash电气特性或Switch游戏帧采样。full/first的ARM交叉编译、分区链接与测试UF2核验随后通过；仍未验证真实Windows串口、真实Flash掉电、19音实机或完整游戏演奏。`firmware/`中v1.1发布文件及校验和未修改。
+
+交叉编译：官方291MiB工具链下载超时后，补充扫描找到现有devkitARM GCC15.2.0；使用它和Pico SDK2.1.1、固定TinyUSB完成两种构建。下一项为RUNTIME_CONFIGURATION.md实机清单；阶段4未验收，阶段5/6留待之后。
+
+
+ARM Release 构建实测结果：
+
+| 变体 | BIN字节 | UF2字节 | Flash末地址 |
+|---|---:|---:|---|
+| full | 90396 | 181248 | 0x1001611C |
+| first | 66020 | 132096 | 0x100101E4 |
+
+两种构建主RAM静态区相同：ram_vector_table=192、data=10144、bss=121832，共132168字节；初始heap段2048字节，核心0栈4096字节，StackBottom=0x20041000、StackTop=0x20042000。Flash末地址均远低于歌曲区0x101DE000。元数据解析已改成16字节显式状态栈，无递归；这些是链接/编译证据，不是运行栈水位或USB实测。
+
+本地PICO_NO_PICOTOOL=ON构建ELF/BIN，再用Microsoft官方uf2conv.py仅转换，family ID来自SDK boot/uf2.h。测试UF2逐块验证所有头字段、地址不跨歌曲区、重组等于BIN及内嵌JSON原文。SHA-256和使用边界见RUNTIME_CONFIGURATION.md。没有自动刷板，没有修改firmware根目录的v1.1发布UF2。上传GitHub时，将full开发测试UF2及独立SHA256复制到firmware/dev，二进制与本地核验版本一致。

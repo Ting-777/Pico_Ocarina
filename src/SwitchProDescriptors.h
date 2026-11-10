@@ -85,7 +85,7 @@ typedef enum {
     GET_VOLTAGE = 0x50,
 } SwitchCommands;
 
-typedef struct {
+typedef struct SwitchAnalog {
     uint8_t data[3];
 
     void setX(uint16_t x) {
@@ -108,7 +108,7 @@ typedef struct {
 } SwitchAnalog;
 
 // left and right calibration are stored differently for some reason, so two structs
-typedef struct {
+typedef struct SwitchLeftCalibration {
     uint8_t data[9];
 
     void getMin(uint16_t& x, uint16_t& y) { packCalib(6, x, y); }
@@ -143,7 +143,7 @@ typedef struct {
     }
 } SwitchLeftCalibration;
 
-typedef struct {
+typedef struct SwitchRightCalibration {
     uint8_t data[9];
 
     void getMin(uint16_t& x, uint16_t& y) { packCalib(3, x, y); }

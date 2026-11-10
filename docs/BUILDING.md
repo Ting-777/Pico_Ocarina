@@ -41,7 +41,7 @@ bash scripts/build.sh full
 bash scripts/build.sh first
 ```
 
-首次配置时，SDK2.1.1可能自动下载并构建picotool，必须能够联网访问GitHub；缺少host工具导致的失败不能通过省略UF2转换掩盖。本次已有UF2使用picotool2.3.2-develop转换。SDK2.1.1的自动获取脚本跟随picotool develop，因此目前未做到所有工具依赖的完整锁定；严格的逐字节可复现构建是后续任务。
+首次配置时，SDK2.1.1可能自动下载并构建picotool，必须能够联网访问GitHub；缺少host工具导致的失败不能通过省略UF2转换掩盖。原v1.1发布UF2使用picotool2.3.2-develop转换。1.2-dev本地测试构建使用现有devkitARM GCC15.2，测试UF2的仅转换及逐块核验过程见RUNTIME_CONFIGURATION.md；正常构建仍建议使用SDK的picotool输出。SDK2.1.1的自动获取脚本跟随picotool develop，因此目前未做到所有工具依赖的完整锁定；严格的逐字节可复现构建是后续任务。
 
 ## 不连接硬件的测试
 
@@ -73,7 +73,7 @@ python tools/generate_song.py --variant first
 python tools/verify_midi.py --variant first
 ```
 
-默认写入 `out/generated/full` 和 `out/generated/first`。可用 `--output-dir`指定输出目录。生成器的 `--source`只接受本项目解析JSON结构；目前不是通用MIDI导入器。任意换曲仍需后续实现轨道选择、速度图、音域验证和指法配置。
+默认写入 `out/generated/full` 和 `out/generated/first`。可用 `--output-dir`指定输出目录。生成器的 `--source`只接受本项目解析JSON结构；目前不是通用MIDI导入器。1.2-dev已支持上传合法主旋律JSON换曲；通用MIDI→配置仍需后续实现轨道选择、速度图和音域策略，详见RUNTIME_CONFIGURATION.md。
 
 ## CI与预编译文件
 

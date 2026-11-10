@@ -4,7 +4,7 @@ This repository is a standalone Raspberry Pi Pico/RP2040 USB controller firmware
 
 ## Current user goal
 
-The user explicitly requires TWO independent stages: (1) a PC program or AI-assisted process converts MIDI into a melody configuration file; (2) the Pico firmware itself loads/validates that file, maps its pitches to fingerings, schedules and sends controller input. Prioritize implementing stage2 using the proposed example files before investing in a generic importer or GUI. Saved songs must play with the PC disconnected and changing songs must not require rebuilding UF2. Preserve one-button continuous playback, independent stick/D-pad modifiers and source phrasing. Runtime loading/upload/storage are planned, not already implemented by v1.1.
+The user explicitly requires TWO independent stages: (1) a PC program or AI-assisted process converts MIDI into a melody configuration file; (2) the Pico firmware itself loads/validates that file, maps its pitches to fingerings, schedules and sends controller input. Prioritize implementing stage2 using the proposed example files before investing in a generic importer or GUI. Saved songs must play with the PC disconnected and changing songs must not require rebuilding UF2. Preserve one-button continuous playback, independent stick/D-pad modifiers and source phrasing. Source 1.2-dev implements bounded runtime loading, upload and dual-slot storage; ARM GCC15.2 + SDK2.1.1 builds and development UF2 verification pass; real USB/Flash/Switch validation remains pending. Published v1.1 UF2 files do not implement these features. firmware/dev/ contains the explicitly unverified 1.2-dev test UF2 and its checksum; preserve the v1.1 baseline files. Read docs/RUNTIME_CONFIGURATION.md for the implemented protocol and validation boundaries.
 
 ## Keep these invariants
 
@@ -17,7 +17,7 @@ The user explicitly requires TWO independent stages: (1) a PC program or AI-assi
 - BOOTSEL sampling temporarily releases flash CS from SRAM with IRQs disabled. Do not add flash access inside that critical section or start a second core without addressing flash coordination.
 - Never label simulator/software results as Switch 2 hardware validation.
 
-Full image fingerings are documented in `docs/FULL_FINGERING_REFERENCE.md` and `profiles/oot_user_image_reference.json`: 19 pitches, 26 variants. The JSON is reference-only; the current C++ table still implements10 pitches. Preserve that distinction until the profile is actually integrated and validated.
+Full image fingerings are documented in `docs/FULL_FINGERING_REFERENCE.md` and `profiles/oot_user_image_reference.json`: 19 pitches, 26 variants. The JSON remains a reference, not a dynamically loaded profile. Source 1.2-dev implements all19 pitches with one fixed variant per pitch (C6 variant1, zero-based; others variant0) and native reference checks. Real hardware validation of19 pitches/26 alternatives remains pending; published v1.1 implements10 pitches.
 
 ## Build and test
 
@@ -35,8 +35,8 @@ Generated `song.h`, MIDI and CSV go under the build/output directory. Do not add
 
 ## Runtime configuration contract
 
-Read `docs/MELODY_FILE_FORMAT.md` and `schemas/melody-v1.schema.json`. Proposed samples are `examples/queens_road_east/melody_full_v1_proposed.json` and `melody_first_v1_proposed.json`. They contain FINAL playback pitches and absolute on/off times in microseconds, not source MIDI or C++ code. The firmware must not transpose or shorten release times again. `metadata` is audit-only. Implement bounded device-side validation, playback from loaded events, full19-note profile, persistent storage and file upload; only then claim runtime configuration support. The schema and samples currently describe a target interface, not existing firmware behavior.
+Read `docs/MELODY_FILE_FORMAT.md` and `schemas/melody-v1.schema.json`. Proposed samples are `examples/queens_road_east/melody_full_v1_proposed.json` and `melody_first_v1_proposed.json`. They contain FINAL playback pitches and absolute on/off times in microseconds, not source MIDI or C++ code. The firmware must not transpose or shorten release times again. `metadata` is audit-only. Implement bounded device-side validation, playback from loaded events, full19-note profile, persistent storage and file upload; only then claim runtime configuration support. Source 1.2-dev validates and loads this contract. Published v1.1 UF2 files cannot load it. See docs/HANDOFF.md for the current implementation and next acceptance work.
 
 ## Scope of the initial import
 
-Build scripts, host tests and documentation accompany v1.1. There is no arbitrary-MIDI importer, runtime config parser, persistent song store, Windows GUI, or configuration USB interface yet. Implement them as incremental changes using the acceptance criteria in `docs/CONFIGURABLE_DESIGN.md`; preserve the demo regressions as integration fixtures.
+Build scripts, host tests and documentation accompany v1.1. The initial v1.1 import had none of these. Source 1.2-dev now has the parser, dual-slot store, configuration-mode USB interface and upload CLI, covered by native tests and successful ARM builds, awaiting real hardware acceptance. There is still no generic MIDI importer, uploaded fingering profile or Windows GUI. Implement them as incremental changes using the acceptance criteria in `docs/CONFIGURABLE_DESIGN.md`; preserve the demo regressions as integration fixtures.

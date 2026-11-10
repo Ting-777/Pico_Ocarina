@@ -1,61 +1,56 @@
-# 当前架构
+# 当前架构（源码1.2-dev）
 
-当前是一个单核、无动态歌曲加载的Pico USB HID设备。没有GP2040-CE网页，也没有从电脑读取实时MIDI的功能。
+单核普通RP2040 Pico。电脑负责MIDI→最终主旋律JSON；板内负责文件校验、音高→指法和绝对时间调度。设备不读取电脑路径、不解析MIDI，也不依赖Windows实时发送每个音。发布v1.1仍是静态专用固件；新源码的构建/软件测试已通过，实机尚未验证。
 
 | 层 | 文件 | 输入/输出 |
 |---|---|---|
-| 离线数据生成 | `tools/generate_song.py` | 解析JSON → 绝对微秒的`SongNote`数组、CSV、两份MIDI |
-| 演奏器 | `src/player.h` | 当前绝对时间 → `ControlState` |
-| 控制器协议 | `src/pro_controller.*` | `ControlState` + 主机命令 → 64字节有线Pro报告 |
-| 硬件循环 | `src/main.cpp` | USB任务、按钮、时钟、LED、发送报告 |
+| 演示离线生成/回归 | tools/generate_song.py | 既有人声轨→原歌曲表、CSV、试听，附带内置fallback JSON字节 |
+| 文件契约/校验 | src/melody.* | 不可变JSON字节→校验结果或LoadedSong |
+| 指法 | src/fingering.h | B4–F6共19音→完整ControlState |
+| 演奏 | src/player.h | SongView、当前绝对时间→ControlState |
+| 控制器协议 | src/pro_controller.* | 状态和主机命令→64字节Pro报告 |
+| 保存 | src/song_store.* | 校验文件→带CRC/代次的双槽Flash容器 |
+| 上传协议 | src/upload_session.* | 有界命令行/分块→校验/提交/状态 |
+| 配置USB/Flash | src/configuration.cpp、src/pico_song_flash.* | 独立CDC、分区内擦写 |
+| 硬件循环 | src/main.cpp、src/usb_descriptors.cpp | 模式、USB任务、按钮、时钟、LED、报告 |
 
-## 数据与调度
+## 校验与调度
 
-`SongNote`包含`on`、`off`（相对人声首音的微秒）和`pitch`（演奏MIDI音高）。`SONG_DURATION_US`包含尾部休止；`SongPlayer.start(now)`把播放原点设为`now+3秒`。每轮`update(now)`根据绝对时间返回当前音或中立状态，不通过逐音sleep等待，所以USB与停止操作仍能响应。
+SongNote保存最终on/off微秒与MIDI pitch。LoadedSong持有有上限的事件数组；SongView不拥有数据。加载时先完整验证，再第二遍写入；输入须在整个调用期间不可变且不与输出重叠。没有堆上的JSON DOM或第二份完整事件表，metadata使用16层固定状态栈而非递归。
 
-当前`uint32_t`歌曲时间上限约71.6分钟；`origin`和当前系统时钟为`uint64_t`。配置化时要对总时长、数组数量、索引和整型转换做边界检查，不能静默溢出。
+SongPlayer.start(view, now)将原点设为now+文件countdown_us；每轮update按绝对时间返回当前指法或中立，超过duration停止。暂停采样后直接定位当前事件，不补发已经错过的一串旧音。不通过整首sleep等待。时间线不再移调、变速、扣释放间隔或折八度。
 
-指法表和倒数目前写在`player.h`；按钮去抖20ms、长按1秒、L+R半秒、GP22、LED25写在`main.cpp`；40ms松键与+5半音写在生成器中。这些是将来需要提取的参数，而不是已有配置文件字段。
+歌曲时间uint32，设备校验最多3600000000微秒（60分钟）；系统时钟和origin用uint64，并防止开始时溢出。每音正时长、严格排序、至少40ms释放、全部落在duration内，每个音高必须有指法。4096事件与65536文件字节两个上限共同生效。
 
-## 逻辑状态
+按钮去抖20ms、长按1秒、L+R半秒、GP22和LED25保持原逻辑。GP21上电接地锁定配置模式。文件倒数可配置0–10秒。
 
-`ControlState`保留三个按钮字节和左右摇杆的12位坐标。左摇杆中心2048，例程使用348/3748作为校准后的上下极值。Switch报告的上方向是较大的Y值。
+## 指法与报告
 
-| MIDI音高 | 音名 | 当前手柄指法 |
-|---|---|---|
-| 72 | C5 | L + 左摇杆下 |
-| 74 | D5 | L |
-| 76 | E5 | L + 左摇杆上 |
-| 77 | F5 | R |
-| 79 | G5 | R + 左摇杆上 |
-| 81 | A5 | A |
-| 82 | B♭5 | A + 十字键上 |
-| 84 | C6 | X + 左摇杆下 |
-| 86 | D6 | X |
-| 89 | F6 | X + 左摇杆上 + 十字键上 |
+内置oot-user-image-reference-v1完整19音表；C6使用图中第二套，其他音使用第一套，保留v1.1既有音的报告状态。机器参考含26种替代按法，尚无动态profile上传，替代按法也尚未逐套实机验证。
 
-这里只实现示例使用的10个音，不是全部B4–F6半音的完整指法库。完整19音、26按法及其ControlState已另列于[完整指法参考](FULL_FINGERING_REFERENCE.md)与`profiles/oot_user_image_reference.json`，但没有接入当前播放器。**当前`fingering()`遇到未列出的音会返回中立状态**，因此通用MIDI导入不能只检查最小/最大音高，还必须验证每一个音都有指法。未来应返回明确的unsupported错误，而不是让某音消失。
+报告第3字节A位3、X位1、Y位0、R位6；第5字节十字键上位1、下位0、L位6。左摇杆位于第6–8字节，12位X/Y打包。默认2048，上3748，下348。十字键和摇杆独立，L3是点击而非方向。lookup_fingering显式返回缺指法，文件加载不会将缺失音静默变为休止。
 
-协议按钮：报告第3字节A位3、X位1、Y位0、R位6；第5字节十字键上位1、下位0、L位6。左摇杆位于第6–8字节，12位X/Y打包；十字键和摇杆不能合并为一组方向。不要把L3摇杆点击当作方向。
+详细按法见FULL_FINGERING_REFERENCE.md；编译表已与参考JSON的19个确定按法逐项核对。
 
-## USB协议
+## USB模式
 
-描述符与初始化/子命令逻辑参考GP2040-CE v0.7.12的Switch Pro驱动。设备只启用HID IN/OUT、64字节端点；无CDC、MSC、MIDI接口。VID/PID是该Pro兼容配置中的0x057E/0x2009，USB产品字符串为Pico Ocarina。
+播放模式沿用Pro HID IN/OUT、64字节端点和原0x057E/0x2009描述符；此模式不枚举CDC。配置模式单独枚举CDC，开发身份0xCAFE/0x4010，不提供Pro HID接口。模式在tusb_init前从GP21锁定，不在挂载中切换。
 
-- 主机0x80配置报告：识别、握手、波特率、关闭USB超时等。
-- 主机0x01子命令：设备信息、报告模式、SPI校准读取、灯光等最小回复。
-- 设备0x21：子命令回复；0x81：USB握手；0x30：输入报告。
-- 成功发送后才推进队列和计数，输入报告目标周期8ms。
-- `ready()`在关闭USB超时或设置0x30模式后置位；这只是本程序的状态，不能证明真实主机已接受全部行为。
+Pro协议参考GP2040-CE v0.7.12实现，但本工程独立，不是其分支：
 
-目前回复队列容量8，满时丢弃新回复；GET_REPORT直接返回0；多个功能仅提供最小ACK。后续开发应补日志和协议状态观测，并在真机验证后记录主机系统版本及测试条件。
+- 主机0x80：识别、握手、波特率、关闭USB超时等。
+- 主机0x01子命令：设备信息、模式、SPI校准、灯光等最小回复。
+- 设备0x21子命令回复、0x81握手、0x30输入；成功发送后才推进计数，输入目标周期8ms。
+- ready只表示本程序内部状态，不能证明主机接受；回复队列8项，满时丢弃新回复，GET_REPORT仍返回0，多项功能仅最小ACK。
 
-## BOOTSEL及Flash
+## Flash/BOOTSEL协调
 
-板载BOOTSEL连接Flash CS。读取代码被放入RAM，暂时禁中断并将CS输出置为高阻，读取后恢复；代码来自Raspberry Pi官方示例。当前不启动第二核、不在播放时写Flash。
+BOOTSEL采样函数在SRAM运行，关闭中断并暂时释放Flash CS，恢复后才返回。保持单核；配置模式不会调用BOOTSEL采样，也不会播放歌曲。
 
-未来持久配置不能随意在主循环或USB回调中写Flash。需设计独立的停止/写入/恢复阶段，协调USB、中断、BOOTSEL采样和Flash XIP，并采用可恢复的原子提交格式。
+保存只在配置模式，通过固定分区内的对齐接口擦写；写入时关中断调用SDK Flash函数，操作后恢复并服务USB。非当前槽的数据和CRC完整后最后写头提交，冷启动同时验证两个槽及JSON，选择有效较新槽。固件链接断言禁止跨入歌曲区。播放中不写Flash。
 
-## 后续必须替换的边界
+普通2MiB Pico最后136KiB为歌曲区；详细容器、命令、CRC、容量、内存实测与实机验收见RUNTIME_CONFIGURATION.md。无有效保存文件时加载明确的内置演示，仍需用户按钮开始。
 
-用户已明确第二步必须在板内完成：将编译期`SONG[]`替换为设备读取、校验和保存的`LoadedSong`。电脑只生成主旋律文件；板子在内部执行pitch→指法→USB，而不是依赖电脑实时推送每一音。文件中的pitch/on/off已完成移调、速度及释放处理，设备不得二次处理；详见[文件契约](MELODY_FILE_FORMAT.md)。当前代码尚未实现此路径。
+## 验证边界
+
+full/first native各6/6；ARM GCC15.2 + SDK2.1.1 + 固定TinyUSB构建通过，两份测试UF2逐块核验。CLI/Flash镜像进程模拟可证明协议、回退和独立调度代码；不能证明真实USB枚举、Flash掉电电气行为或游戏音乐输入。下一阶段是实机验收，随后再开发通用MIDI导入与GUI。

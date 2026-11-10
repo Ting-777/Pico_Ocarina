@@ -4,6 +4,8 @@
 #include <iostream>
 #include "../src/pro_controller.h"
 #include "../src/player.h"
+#include "song.h"
+static const SongView demo{SONG,SONG_COUNT,SONG_DURATION_US,3000000};
 int main(){
  ProController c;c.reset();uint8_t out[64];
  assert(c.prepare(0,out)&&out[0]==0x81&&out[1]==1);c.sent(0);assert(!c.prepare(1,out));
@@ -18,13 +20,13 @@ int main(){
  spi[15]=255;c.receive(0,spi,16);assert(c.prepare(13,out)&&out[19]==44);c.sent(13);
  for(unsigned i=0;i<16;i++)c.receive(0,spi,i); // truncated commands must be safe
  c.reset();assert(!c.ready());
- SongPlayer p;p.start(0);assert(p.counting(2999999));assert(p.update(0).right==0);
+ SongPlayer p;p.start(demo,0);assert(p.counting(2999999));assert(p.update(0).right==0);
  unsigned presses=0;bool wasOn=false;
  for(uint64_t t=3000000;t<=3000000+SONG_DURATION_US+1000;t+=1000){
   auto s=p.update(t);bool on=s.left||s.right;if(on&&!wasOn)presses++;wasOn=on;
  }
  assert(presses==SONG_COUNT&&!p.active());
- p.start(0);p.stop();assert(p.update(4000000).right==0&&!p.active());
+ p.start(demo,0);p.stop();assert(p.update(4000000).right==0&&!p.active());
  auto high=fingering(89),low=fingering(86);
  assert(high.right==2&&high.left==2&&high.ly==3748);assert(low.right==2&&low.left==0&&low.ly==2048);
  unsigned endings=0;
