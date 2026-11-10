@@ -1,0 +1,48 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        variant: [full, first]
+    steps:
+      - uses: actions/checkout@v4
+      - run: >-
+          cmake -S . -B out/native -G Ninja
+          -DOCARINA_HOST_TESTS=ON -DOCARINA_SANITIZERS=ON
+          -DOCARINA_SONG_VARIANT=${{ matrix.variant }} -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build out/native --parallel
+      - run: ctest --test-dir out/native --output-on-failure
+  firmware:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        variant: [full, first]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib ninja-build
+      - name: Fetch Pico SDK 2.1.1
+        run: |
+          git clone --depth 1 --branch 2.1.1 https://github.com/raspberrypi/pico-sdk.git .deps/pico-sdk
+          git -C .deps/pico-sdk submodule update --init --depth 1 lib/tinyusb
+      - name: Build UF2
+        env:
+          PICO_SDK_PATH: ${{ github.workspace }}/.deps/pico-sdk
+        run: bash scripts/build.sh ${{ matrix.variant }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pico-ocarina-${{ matrix.variant }}
+          path: |
+            build/${{ matrix.variant }}/pico_ocarina.uf2
+            build/${{ matrix.variant }}/generated/*.mid
+            build/${{ matrix.variant }}/generated/*.csv
+          if-no-files-found: error

@@ -1,0 +1,60 @@
+#include "pico/stdlib.h"
+#include "hardware/sync.h"
+#include "hardware/structs/ioqspi.h"
+#include "hardware/structs/sio.h"
+#include "bsp/board_api.h"
+#include "tusb.h"
+#include "pro_controller.h"
+#include "player.h"
+static ProController controller;
+static SongPlayer player;
+// Adapted from Raspberry Pi pico-examples picoboard/button (BSD-3-Clause).
+// This is a single-core program; the flash chip select is sampled from SRAM.
+bool __no_inline_not_in_flash_func(bootsel_pressed)(){
+ uint32_t flags=save_and_disable_interrupts();
+ hw_write_masked(&ioqspi_hw->io[1].ctrl,GPIO_OVERRIDE_LOW<<IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
+ for(volatile int i=0;i<1000;i++){}
+ bool down=!(sio_hw->gpio_hi_in&(1u<<1));
+ hw_write_masked(&ioqspi_hw->io[1].ctrl,GPIO_OVERRIDE_NORMAL<<IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
+ restore_interrupts(flags);return down;
+}
+extern "C" void tud_mount_cb(){controller.reset();player.stop();}
+extern "C" void tud_umount_cb(){controller.reset();player.stop();}
+extern "C" void tud_suspend_cb(bool){player.stop();controller.state={};}
+extern "C" void tud_resume_cb(){}
+extern "C" uint16_t tud_hid_get_report_cb(uint8_t,uint8_t,hid_report_type_t,uint8_t*,uint16_t){return 0;}
+extern "C" void tud_hid_set_report_cb(uint8_t,uint8_t id,hid_report_type_t type,uint8_t const* data,uint16_t len){if(type==HID_REPORT_TYPE_OUTPUT)controller.receive(id,data,len);}
+int main(){
+ board_init();gpio_init(25);gpio_set_dir(25,GPIO_OUT);gpio_init(22);gpio_set_dir(22,GPIO_IN);gpio_pull_up(22);
+ tusb_init();uint64_t sampleAt=0,changedAt=0,pressedAt=0,joinUntil=0;
+ bool lastRaw=false,stable=false,handled=false;
+ while(true){
+  tud_task();uint64_t now=time_us_64();
+  if(!tud_mounted()||tud_suspended())player.stop();
+  if(now>=sampleAt){
+   sampleAt=now+10000;bool raw=bootsel_pressed()||!gpio_get(22);
+   if(raw!=lastRaw){lastRaw=raw;changedAt=now;}
+   if(raw!=stable&&now-changedAt>=20000){
+    stable=raw;
+    if(stable){pressedAt=now;handled=false;if(player.active()){player.stop();handled=true;}}
+    else if(!handled&&controller.ready()&&tud_mounted())player.start(now);
+   }
+   if(stable&&!handled&&now-pressedAt>=1000000){
+    if(controller.ready()&&tud_mounted())joinUntil=now+500000;
+    handled=true;
+   }
+  }
+  controller.state=player.update(now);
+  if(now<joinUntil){controller.state={};controller.state.right=0x40;controller.state.left=0x40;}
+  uint8_t report[64];
+  if(tud_mounted()&&tud_hid_ready()&&controller.prepare(uint32_t(now/1000),report)){
+   if(tud_hid_report(0,report,64))controller.sent(uint32_t(now/1000));
+  }
+  bool led;
+  if(!controller.ready()||!tud_mounted())led=(now/500000)%2;
+  else if(player.counting(now))led=(now/100000)%2;
+  else if(player.active())led=(now/200000)%2;
+  else led=true;
+  gpio_put(25,led);tight_loop_contents();
+ }
+}
