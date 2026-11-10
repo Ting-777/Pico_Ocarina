@@ -16,6 +16,8 @@
 
 建议先提取`Song`、`PlaybackOptions`、`FingeringProfile`接口，保留现有`full/first`作为固定回归样例，再逐步替换编译期数组。
 
+完整指法起点已在[完整指法参考](FULL_FINGERING_REFERENCE.md)和`profiles/oot_user_image_reference.json`中转录：19个音、26套按法，带原生Pro ControlState与v1.1实现状态。它是参考profile，不是已加载的运行时配置；可优先实现校验和转换，再替换10音硬编码表。
+
 ## 电脑端配置草案
 
 ```json

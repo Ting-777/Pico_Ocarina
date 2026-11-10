@@ -19,3 +19,7 @@
 原专用固件的native测试也通过ASan/UBSan，执行器处于ptrace环境时仅关闭LSan；仓库CI包含GCC/Clang sanitizer测试选项。不要把native测试通过当作物理协议或游戏指法已经验证。
 
 本地工具：xPack Arm GNU GCC14.2.1-1.1、Pico SDK2.1.1、该SDK的TinyUSB子模块、CMake4.4.4、Ninja1.13.2、Python3.12.14。完整固件text32960 bytes、data0、bss3588；短版text27664 bytes、data0、bss3588。详见`firmware/SHA256SUMS_v1_1.txt`。
+
+## 完整指法文档补充
+
+已对照用户图片转录19个音、26套按法，检查MIDI音高71–89连续覆盖、按钮/摇杆编码，并将现有10音的默认方案逐个与实际C++ `fingering()`输出比对。此补充仅增加文档和参考JSON，未修改播放器或UF2，未新增实机通过记录。

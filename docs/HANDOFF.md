@@ -24,6 +24,8 @@ ctest --test-dir out/native-full -C Debug --output-on-failure
 
 重复first版本测试，然后按`BUILDING.md`交叉编译。查看`src/player.h`、`src/main.cpp`与`tools/generate_song.py`中的硬编码参数，先提取接口和配置结构，保持示例输出不变。
 
+完整用户图片已转录到`docs/FULL_FINGERING_REFERENCE.md`及`profiles/oot_user_image_reference.json`：包括19个音的26种按法、替代指法和报告编码。请先区分参考中的19音与当前代码实现的10音，不要声称加载JSON功能已经存在。
+
 ## 下一项建议任务
 
 实现电脑端可配置的MIDI→标准演奏时间线工具。输入轨道、片段、调高、tempo比例、复音策略与指法profile；输出审计CSV、试听MIDI和设备中间格式。复用原文件第27小节低尾句与第51/59小节高变体做集成回归。此阶段不要重写USB描述符，也不要自动折八度。

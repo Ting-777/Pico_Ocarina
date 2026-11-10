@@ -31,6 +31,10 @@
 
 v1.0 曾错误地把第二遍高音唱段作为“第一遍”试听；本仓库只保留已纠正的 v1.1 基线。详见 [音符来源与回归点](docs/MUSIC_AND_PROVENANCE.md)。
 
+## 完整指法参考
+
+用户图片中的 **19个音、26种按法** 已整理到 [完整指法文档](docs/FULL_FINGERING_REFERENCE.md) 和 [机器可读JSON](profiles/oot_user_image_reference.json)，包含所有替代按法及原生Pro报告的按钮位/摇杆坐标。当前固件仍只实现示例用到的10个音；参考JSON尚未接入播放器。
+
 ## 本地开发
 
 依赖与 Windows PowerShell 操作见 [构建文档](docs/BUILDING.md)。
@@ -66,6 +70,7 @@ ctest --test-dir out/native -C Debug --output-on-failure
 | `src/pro_controller.*` | 有线Pro手柄初始化与输入报告；不依赖GP2040-CE工程 |
 | `tools/` | 示例歌曲表、试听生成与独立MIDI核验 |
 | `examples/queens_road_east/` | 原MIDI、解析人声轨、逐音表、试听和原调对照 |
+| `profiles/` | 完整用户图片指法参考；尚未由固件加载 |
 | `tests/` | 可在桌面运行的协议与演奏回归测试 |
 | `firmware/` | 已编译v1.1 UF2与SHA-256 |
 | `docs/` | 构建、硬件检查、来源、架构与接手计划 |

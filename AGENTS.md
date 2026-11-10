@@ -17,6 +17,8 @@ Develop a configurable ocarina player usable from Windows. Preserve one-button c
 - BOOTSEL sampling temporarily releases flash CS from SRAM with IRQs disabled. Do not add flash access inside that critical section or start a second core without addressing flash coordination.
 - Never label simulator/software results as Switch 2 hardware validation.
 
+Full image fingerings are documented in `docs/FULL_FINGERING_REFERENCE.md` and `profiles/oot_user_image_reference.json`: 19 pitches, 26 variants. The JSON is reference-only; the current C++ table still implements10 pitches. Preserve that distinction until the profile is actually integrated and validated.
+
 ## Build and test
 
 Native software tests require only Python3, CMake, and a host C++17 compiler:
