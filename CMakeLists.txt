@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.18...4.4)
 
 option(OCARINA_HOST_TESTS "Build native software tests instead of RP2040 firmware" OFF)
 option(OCARINA_SANITIZERS "Enable ASan and UBSan for native GCC/Clang tests" OFF)
+option(OCARINA_MIDI_TESTS "Test MIDI import (requires tools/requirements-midi.txt)" OFF)
 set(OCARINA_SONG_VARIANT "full" CACHE STRING "Demo arrangement: full or first")
 set_property(CACHE OCARINA_SONG_VARIANT PROPERTY STRINGS full first)
 if(NOT OCARINA_SONG_VARIANT MATCHES "^(full|first)$")
@@ -61,6 +62,17 @@ if(OCARINA_HOST_TESTS)
   add_test(NAME windows_cli_protocol COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_upload_cli.py" $<TARGET_FILE:simulated_device>)
   set_tests_properties(windows_cli_protocol PROPERTIES TIMEOUT 60)
+  if(OCARINA_MIDI_TESTS)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" -c "import mido"
+      RESULT_VARIABLE MIDI_IMPORT_STATUS OUTPUT_QUIET ERROR_QUIET)
+    if(NOT MIDI_IMPORT_STATUS EQUAL 0)
+      message(FATAL_ERROR "Install MIDI test dependency: python -m pip install -r tools/requirements-midi.txt")
+    endif()
+    add_test(NAME midi_import COMMAND "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_midi_import.py"
+      --checker $<TARGET_FILE:melody_check> --device $<TARGET_FILE:simulated_device>)
+    set_tests_properties(midi_import PROPERTIES TIMEOUT 90)
+  endif()
   # Keep assertions active for every native build, including Release.
   foreach(target melody protocol_player_tests melody_tests melody_check store_upload_tests simulated_device)
     if(MSVC)

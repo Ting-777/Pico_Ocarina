@@ -31,7 +31,7 @@
 1. 复现已通过的ARM构建：本机现有编译器C:/msys64/opt/devkitpro/devkitARM（GCC15.2.0），SDK在out/deps/pico-sdk-2.1.1，TinyUSB固定86ad6e56c1700e85f1c5678607a762cfe3aa2f47。两份ELF及分区断言通过，主RAM静态132168字节、4KiB核心0栈；尚待板上水位验证。
 2. 按 `RUNTIME_CONFIGURATION.md` 用真实Pico验证GP21配置模式、CDC和上传；同一UF2接收full/first、STATUS、断电保留、坏包/中止/断连与真实掉电回退。
 3. Switch/游戏验证USB识别、玩家分配、19音确定按法、独立D-pad/摇杆、重复音与停止回中；保留第一遍低尾句和后续高变体。没有设备时明确记录未验证，继续可做的软件工作。
-4. 通过这些后再更新发布UF2/校验和；随后实现通用MIDI导入、同一文件派生试听、GUI或AI辅助。不要提前投入大型界面。
+4. MIDI导入首版CLI已按用户“试下”实现，见下面记录；之后扩展更多真实MIDI案例、GUI或AI选轨建议。实机通过后再更新正式发布固件。
 
 ## 继续前阅读/执行
 
@@ -45,3 +45,14 @@ ctest --test-dir out/native-full -C Debug --output-on-failure
 ```
 
 本机测试工具在out/deps，未写入全局PATH；MinGW编译器在C:/msys64/mingw64/bin，ARM编译器在C:/msys64/opt/devkitpro/devkitARM/bin。构建输出与依赖均忽略，不要把它们提交成源码或声称已发布。
+
+
+## 后续：MIDI转换首版已跑通
+
+新增tools/midi_to_melody.py（inspect/convert/demo/preview）、tools/melody_format.py、固定依赖tools/requirements-midi.txt和examples/queens_road_east/import_recipe.json。转换器直接读取原MIDI，不依赖source_voice.json或现成歌曲JSON；后二者仅作为独立测试基准。
+
+试运行 `python tools/midi_to_melody.py demo first --force`，输出out/converted/queens_first.json及同名preview.mid、report.json。full同理。两份notes、duration、countdown与原样例完全一致；原轨577事件和5处八度叠音也逐项核验。
+
+首版范围：PPQ SMF0/1、显式轨道/通道选择、片段、完整tempo map、整体移调和速度；冲突默认拒绝，八度取高和连奏截短须显式选项，弯音/CC64踏板默认拒绝。没有自动主旋律抽取或GUI。所有桌面变换都发生在JSON生成前，Pico继续按文件执行。
+
+16项转换测试通过；开启OCARINA_MIDI_TESTS后的full/first各7/7通过，包括新生成文件进入现有C++解析器与上传协议，并在native设备进程重启后回读。真实USB/Flash/Switch仍未验证；本次未修改C++固件或测试UF2。这一轮转换器改动已完成本地提交，准备推送feature/configurable-player。上传暂因GitHub连接服务无法访问、本机Git未登录而受阻；连接恢复后继续推送。远端CI尚未运行本轮提交。

@@ -1,0 +1,29 @@
+{
+  "source_sha256": "69c74d3c8b63d286537c7a36055b75448c02e956be9360e16286a2fb11f64781",
+  "variants": {
+    "full": {
+      "track": 2,
+      "channel": 0,
+      "start_tick": 4224,
+      "end_tick": 47232,
+      "transpose": 5,
+      "speed": "1",
+      "polyphony": "octave-highest",
+      "overlap": "error",
+      "title": "Queens Road East full",
+      "countdown_us": 3000000
+    },
+    "first": {
+      "track": 2,
+      "channel": 0,
+      "start_tick": 4224,
+      "end_tick": 13440,
+      "transpose": 5,
+      "speed": "1",
+      "polyphony": "octave-highest",
+      "overlap": "error",
+      "title": "Queens Road East first",
+      "countdown_us": 3000000
+    }
+  }
+}

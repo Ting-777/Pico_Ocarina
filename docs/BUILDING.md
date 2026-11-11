@@ -73,10 +73,30 @@ python tools/generate_song.py --variant first
 python tools/verify_midi.py --variant first
 ```
 
-默认写入 `out/generated/full` 和 `out/generated/first`。可用 `--output-dir`指定输出目录。生成器的 `--source`只接受本项目解析JSON结构；目前不是通用MIDI导入器。1.2-dev已支持上传合法主旋律JSON换曲；通用MIDI→配置仍需后续实现轨道选择、速度图和音域策略，详见RUNTIME_CONFIGURATION.md。
+默认写入 `out/generated/full` 和 `out/generated/first`。可用 `--output-dir`指定输出目录。生成器的 `--source`只接受本项目解析JSON结构；目前不是通用MIDI导入器。1.2-dev已支持上传合法主旋律JSON换曲；MIDI→配置现有首版命令行工具 `tools/midi_to_melody.py`，支持显式选轨、速度图和音域检查；操作见 [使用说明](../开始使用.md#把-midi-转成歌曲文件)。
 
 ## CI与预编译文件
 
 GitHub Actions分别跑两种示例的native测试和Pico交叉编译，并上传UF2/MIDI/CSV。CI使用Ubuntu提供的ARM工具链，版本可能与本次本地14.2.1不同；不要要求不同工具链产物SHA相同。
 
 `firmware/`是已构建的v1.1基线，SHA-256保存在同目录。构建路径、工具版本或元数据变化可改变二进制；这不等于歌曲数据改变。需要逐音/逐状态核验时，以源MIDI、生成CSV及回归测试为准。
+
+
+## MIDI转换测试（可选）
+
+原native测试仍不需要第三方Python包。启用导入器测试时，先安装Mido，再配置：
+
+```powershell
+python -m pip install -r tools/requirements-midi.txt
+cmake -S . -B out/native-full -DOCARINA_HOST_TESTS=ON -DOCARINA_SONG_VARIANT=full -DOCARINA_MIDI_TESTS=ON
+cmake --build out/native-full --config Debug
+ctest --test-dir out/native-full -C Debug --output-on-failure
+```
+
+first另建目录同样配置。CI已配置为安装依赖并开启此测试；本次上传前已在本地运行，远端结果以GitHub Actions记录为准。
+
+本机为避免更改全局包，将Mido装在`.deps/python`，运行转换/测试前需设置 `$env:PYTHONPATH=(Join-Path $PWD '.deps/python')`。正常按上面pip安装的环境无需此设置。MinGW构建的测试程序还需要编译器bin目录在PATH中。
+
+导入器核心保留整数tick，用全曲速度事件分段累加有理数时间；片段与速度变换后仅最终舍入一次到整数微秒。默认拒绝多音/重叠，octave-highest仅处理同起音的同音名八度叠音；trim连奏、忽略弯音/CC64踏板都需显式选项。输入限制16MiB、500000解析事件，第一版仅支持PPQ SMF0/1，所有新文件仍受板内64KiB/4096音等联合限制。
+
+试听仅从最终JSON产生：120 BPM、PPQ25000，对应20µs时间刻度；普通事件舍入误差不超过10µs。比一个刻度还短的音至少保留一刻度，并在报告列出音符索引与实际最大误差，不反向修改设备JSON。试听不包含启动倒数，也不代表游戏实测采样精度。

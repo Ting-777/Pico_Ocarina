@@ -12,7 +12,7 @@
 2. **试播**：不接跳线，接 Switch，进入陶笛自由演奏界面，短按 BOOTSEL。内置《皇后大道东》完整版。
 3. **以后换歌**：断电时连接 GP21–GND，接 Windows 上传 JSON 歌曲文件；上传后断电取下跳线，再接 Switch 播放。详细针脚、COM 号和可复制命令见 [使用说明](开始使用.md)。
 
-当前上传接受已转换好的 JSON，不直接接受 MIDI。附带完整版和约 49 秒短版，供第一次测试。
+自己的MIDI现在可以先用转换工具选轨并生成JSON，再上传到Pico。最简单的试法是 `python tools/midi_to_melody.py demo first --force`；安装和完整操作见 [MIDI转换步骤](开始使用.md#把-midi-转成歌曲文件)。附带完整版和约49秒短版，供第一次测试。
 
 **这是开发测试版：软件测试、编译及固件文件检查已通过；真实 Pico、Windows USB 和 Switch 游戏尚未实测。** `firmware/dev/` 是支持上传换歌的新测试版；`firmware/` 根目录的 v1.1 只能播放内置歌曲。
 

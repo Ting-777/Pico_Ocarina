@@ -65,3 +65,18 @@ ARM Release 构建实测结果：
 两种构建主RAM静态区相同：ram_vector_table=192、data=10144、bss=121832，共132168字节；初始heap段2048字节，核心0栈4096字节，StackBottom=0x20041000、StackTop=0x20042000。Flash末地址均远低于歌曲区0x101DE000。元数据解析已改成16字节显式状态栈，无递归；这些是链接/编译证据，不是运行栈水位或USB实测。
 
 本地PICO_NO_PICOTOOL=ON构建ELF/BIN，再用Microsoft官方uf2conv.py仅转换，family ID来自SDK boot/uf2.h。测试UF2逐块验证所有头字段、地址不跨歌曲区、重组等于BIN及内嵌JSON原文。SHA-256和使用边界见RUNTIME_CONFIGURATION.md。没有自动刷板，没有修改firmware根目录的v1.1发布UF2。上传GitHub时，将full开发测试UF2及独立SHA256复制到firmware/dev，二进制与本地核验版本一致。
+
+
+## MIDI转换首版（本地）
+
+开始开发前重跑原full/first，各6/6通过。Mido1.3.3安装在工程私有.deps/python（本次解析依赖packaging26.3），Python3.9.0；不更改全局Python包。
+
+16项MIDI测试全部通过：原MIDI人声577事件与独立source_voice基准一致；full/first的572/132个最终事件及duration/countdown与现有JSON完全一致；仅显式省略full中的5个低八度叠音，第一遍低尾句和后续高变体保留。
+
+覆盖其他轨道的速度事件、跨变速点长音、片段截取、整体速度缩放、有理数最终舍入、类型0多通道、velocity=0结束、纯八度和普通和弦区分、显式连奏截短、拒绝折八度、速度不足40ms时拒绝/减速后成功、配对异常、片段开始前的踏板/弯音状态、类型2/SMPTE/冲突速度拒绝、文件覆盖保护、从其他工作目录调用、轨道试听与JSON重生试听。
+
+新生成的两份JSON已进入真实C++ melody_check校验器，再经现有Python上传器传入native设备进程；同一程序先full再first，进程重启后回读132音及CRC一致。没有连接真实设备。两份试听MIDI从最终JSON生成，经Mido独立播放时间解码逐音核对，最大事件时间差10µs；该数值不表示游戏实际输入或发声精度。
+
+CMake增加可选OCARINA_MIDI_TESTS，默认OFF以保留原host测试无第三方依赖的用法；CI配置为安装固定Mido并开启。开启后本机full/first各7/7通过。CI新配置尚未远端运行；本次没有修改C++固件和UF2，也没有替换既有示例JSON/CSV/MIDI。
+
+输出为out/converted/queens_full.json、queens_first.json及对应.preview.mid/.report.json；这些生成物只保留在输出目录。示例导入方案另存为import_recipe.json，锁定源MIDI SHA256和明确的轨道/片段/移调规则。

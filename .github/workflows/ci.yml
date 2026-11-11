@@ -13,9 +13,13 @@ jobs:
         variant: [full, first]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r tools/requirements-midi.txt
       - run: >-
           cmake -S . -B out/native -G Ninja
-          -DOCARINA_HOST_TESTS=ON -DOCARINA_SANITIZERS=ON
+          -DOCARINA_HOST_TESTS=ON -DOCARINA_SANITIZERS=ON -DOCARINA_MIDI_TESTS=ON
           -DOCARINA_SONG_VARIANT=${{ matrix.variant }} -DCMAKE_BUILD_TYPE=Debug
       - run: cmake --build out/native --parallel
       - run: ctest --test-dir out/native --output-on-failure
