@@ -1,6 +1,6 @@
 # 开发参考：运行时配置（源码 1.2-dev）
 
-本次已实现板内 JSON 校验、LoadedSong 播放、19 音内置指法、双槽 Flash、独立 CDC 配置模式和 Windows CLI。full/first native 回归与上传/掉电模拟通过。**full/first已用ARM GCC15.2（devkitARM）+ SDK2.1.1交叉编译，测试UF2已逐块核验；未在Pico + Windows USB + Switch + 游戏上实测。** `firmware/` 根目录的v1.1不能上传JSON；`firmware/dev/`另提供支持上传的1.2-dev测试UF2及校验和。
+本次已实现板内 JSON 校验、LoadedSong 播放、19 音内置指法、双槽 Flash、独立 CDC 配置模式和 Windows CLI。full/first native 回归与上传/掉电模拟通过。**本轮长按更新的full/first已用Arm GNU14.2.Rel1（GCC14.2.1）+ SDK2.1.1交叉编译，测试UF2已逐块核验；未在Pico + Windows USB + Switch + 游戏上实测。** `firmware/` 根目录的v1.1不能上传JSON；`firmware/dev/`另提供支持上传的1.2-dev测试UF2及校验和。
 
 普通使用请看 [刷入、上传和播放步骤](../开始使用.md)。本文供开发时查协议、文件限制和Flash保存结构。
 
@@ -13,7 +13,7 @@
 - 事件必须有正时长，严格排序，前一 off 到后一 on 至少 40000 微秒；pitch 在固定 19 音表中，否则明确报错。
 - 两遍解析：第一遍完整校验，第二遍写事件表。调用方保持输入不可变且不与输出重叠，加载时停止播放。拒绝时 LoadedSong 保持原样。
 - 板内不再移调、变速、缩短 off、折八度或丢弃缺指法音。
-- LoadedSong 最大约 49 KiB，上传暂存 64 KiB；没有动态 JSON DOM 或第二份完整事件表。本次ARM链接结果：full/first Flash镜像90396/66020字节；主RAM静态区132168字节，另有2KiB初始heap区、4KiB核心0栈（scratch Y）。分区断言通过；尚未做实机栈水位/运行压力测量。
+- LoadedSong 最大约 49 KiB，上传暂存 64 KiB；没有动态 JSON DOM 或第二份完整事件表。本轮ARM链接结果：full/first Flash镜像91336/66960字节；主RAM静态区132044字节，另有2KiB初始heap区、4KiB核心0栈（scratch Y）。分区断言通过；尚未做实机栈水位/运行压力测量。
 
 19 音使用图片按法 1，C6 保留 v1.1 的按法 2。26 种替代按法保留在参考 JSON，但固件仅选择每音一个确定按法，不支持上传 profile。
 
@@ -50,11 +50,13 @@
 
 ## 本次本地开发构建产物
 
-- `out/pico-full/pico_ocarina.uf2`：90396字节BIN，181248字节UF2，SHA-256 `8bebdd64de64b90442a448a1f5d6644cba4cb20d199e1cd4d9a36970363ebced`。
-- `out/pico-first/pico_ocarina.uf2`：66020字节BIN，132096字节UF2，SHA-256 `c83f293389a0575a968fd02a09b157e1bfd9ee161ad551e6cb26102d131f5b86`。
+- `out/bootsel/pico-full/pico_ocarina.uf2`：91336字节BIN，182784字节UF2，SHA-256 `2639269f465a4842b126d343b0e6429f9df20de604018cab54f9b7072b688e74`。
+- `out/bootsel/pico-first/pico_ocarina.uf2`：66960字节BIN，134144字节UF2，SHA-256 `7d5421159cbd08a1aa7f6b4c58b5004a88216374fd073f30ead2efced750b3e9`。
 - 两份功能相同，只有无保存文件时的fallback演示不同；任一份都可上传full、first或其他合法文件。尚未经实机验收，未替换v1.1基线；full开发构建另复制为firmware/dev/Pico_Ocarina_Configurable_v1_2_dev.uf2，供GitHub下载。
 
 本机构建因未安装picotool使用了 `PICO_NO_PICOTOOL=ON` 生成ELF/BIN；用Microsoft官方uf2conv.py的仅转换模式（--convert，未刷写任何设备）与SDK中的RP2040 family ID生成测试UF2。逐块检查magic、family、标志、地址、序号、块数、歌曲分区边界，重组数据与BIN完全一致，内置JSON原文也在镜像中。常规构建仍使用SDK的picotool输出，不需要这个本地转换步骤。
+
+本轮已包含新的长按换手柄序列：L+R半秒 → 全松1秒 → L+R半秒 → 全松1秒 → A半秒 → 全松；取消及按钮行为见 [使用说明](../开始使用.md)。旧的out/pico-full、out/pico-first产物不是本轮更新，刷写时使用firmware/dev中的新文件并核对其SHA256SUMS.txt。
 
 ## 实机验收待办
 

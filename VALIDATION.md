@@ -80,3 +80,22 @@ ARM Release 构建实测结果：
 CMake增加可选OCARINA_MIDI_TESTS，默认OFF以保留原host测试无第三方依赖的用法；CI配置为安装固定Mido并开启。开启后本机full/first各7/7通过。CI新配置尚未远端运行；本次没有修改C++固件和UF2，也没有替换既有示例JSON/CSV/MIDI。
 
 输出为out/converted/queens_full.json、queens_first.json及对应.preview.mid/.report.json；这些生成物只保留在输出目录。示例导入方案另存为import_recipe.json，锁定源MIDI SHA256和明确的轨道/片段/移调规则。
+
+## 2026-11-10：BOOTSEL长按换手柄流程
+
+待机长按约1秒后，改为L+R按住500ms → 全松1000ms → L+R按住500ms → 全松1000ms → A按住500ms → 全松。整个序列使用64位绝对起点非阻塞定位，持续服务USB；再次按下按钮、断连、USB挂起或协议未就绪时取消。BOOTSEL和GP22等效，持续按住只触发一次，长按松开不播放。
+
+本机Windows、Python3.12.0、w64devkit2.11.0（GCC16.2.0）、CMake4.4.4、Ninja1.13.2；Debug严格告警、assert启用、OCARINA_MIDI_TESTS=ON。full/first各8/8通过，输出位于out/bootsel/native-full和native-first。新增controller_join检查微秒边界、两次独立L+R、A的正确按钮位、全程摇杆中立、实际8ms报告顺序、所有步骤取消/重启、跨32位微秒时钟和延迟循环不补发旧步骤；原歌曲/指法/上传/存储/MIDI回归保持通过。这里的取消测试调用序列stop接口，不模拟真实USB挂起或实体按键采样。
+
+首次MIDI测试因系统临时目录的文件替换权限失败；将TEMP/TMP指向工程内独立临时目录后，两套完整测试均通过，没有修改导入器代码。本轮未运行ASan/UBSan，也没有真实Pico或游戏验收。
+
+固件使用SDK2.1.1、Arm GNU14.2.Rel1（GCC14.2.1），full/first Release构建及歌曲分区断言均通过。官方编译器压缩包SHA256与Arm提供值一致；编译器在受限执行环境中出现Windows系统DLL加载错误，在正常Windows环境完成构建。继续使用PICO_NO_PICOTOOL=ON及uf2conv.py的--convert模式，没有刷写设备。
+
+| 变体 | BIN字节 | UF2字节 | Flash末地址 |
+|---|---:|---:|---|
+| full | 91336 | 182784 | 0x100164C8 |
+| first | 66960 | 134144 | 0x10010590 |
+
+两种构建ram_vector_table=192、data=10064、bss=121788，共132044字节，另有2048字节heap和4096字节核心0栈；StackBottom/Top仍为0x20041000/0x20042000。相对此前GCC15.2产物，变化也包含本轮工具链和路径差异，不应将尺寸差异全部归因于按键逻辑。
+
+两份新UF2逐块通过magic、RP2040 family、标志、地址/序号/块数、歌曲分区边界、重组等于BIN、内嵌JSON原文检查。out/bootsel/pico-full的UF2已复制到firmware/dev并更新SHA256SUMS.txt；full SHA256为2639269f465a4842b126d343b0e6429f9df20de604018cab54f9b7072b688e74，first为7d5421159cbd08a1aa7f6b4c58b5004a88216374fd073f30ead2efced750b3e9。两份v1.1基线仍与原校验和一致。待实机确认游戏中的首次识别、再次L+R加入及A确认。
