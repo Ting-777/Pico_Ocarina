@@ -99,3 +99,20 @@ CMake增加可选OCARINA_MIDI_TESTS，默认OFF以保留原host测试无第三�
 两种构建ram_vector_table=192、data=10064、bss=121788，共132044字节，另有2048字节heap和4096字节核心0栈；StackBottom/Top仍为0x20041000/0x20042000。相对此前GCC15.2产物，变化也包含本轮工具链和路径差异，不应将尺寸差异全部归因于按键逻辑。
 
 两份新UF2逐块通过magic、RP2040 family、标志、地址/序号/块数、歌曲分区边界、重组等于BIN、内嵌JSON原文检查。out/bootsel/pico-full的UF2已复制到firmware/dev并更新SHA256SUMS.txt；full SHA256为2639269f465a4842b126d343b0e6429f9df20de604018cab54f9b7072b688e74，first为7d5421159cbd08a1aa7f6b4c58b5004a88216374fd073f30ead2efced750b3e9。两份v1.1基线仍与原校验和一致。待实机确认游戏中的首次识别、再次L+R加入及A确认。
+
+## 2026-11-11：Python转换窗口及小屏布局
+
+Windows、Python3.9、Tk8.6.9、Mido1.3.3；先重跑full/first各8/8，再重新配置构建，加入可选GUI表单测试后各9/9通过。原演示、19音、上传/重启存储及控制器序列回归保持通过。
+
+- `test_midi_gui_model.py`：6项通过。两示例572/132音及标题、时长、倒数与独立样例一致，输出通过C++解析器；数字/拍点精度、非法输入与Windows文件名、无隐式折八度/复音处理、MCI生命周期均覆盖。
+- `test_midi_gui_window.py`：5项通过。实际Tk事件循环检查两示例按钮到输出文件、参数变动后结果失效、输入错误/取消覆盖、坏文件清除旧选择、后台任务期间界面响应；完整示例生成后遍历所有已显示控件，1180×680、1080×620、940×580下两个页签均位于父容器内，轨道区保留可见高度。
+- 本机1536×864屏幕，默认客户区1180×680，工作区适配已执行。Windows MCI对含中文路径的生成试听文件真实启动，状态返回playing，停止后关闭。没有人工听音确认。
+- 窗口截图工具初始化两次均报 `trusted Node process exited unexpectedly`；布局证据来自实际Tk几何与交互测试，没有完成截图目视验收。其他缩放比例、多显示器和不同Windows MIDI设备尚待使用反馈。
+
+默认无依赖native用法不变；GUI核心测试仅在 `OCARINA_MIDI_TESTS=ON` 时加入，真实窗口测试单独运行以适配无桌面的CI。没有修改C++固件、UF2或原有音乐样例，也没有Pico/USB/Flash/Switch新增实机验证。
+
+### CMD入口实测修复（2026-11-11）
+
+用户反馈启动CMD乱码/拆行报错后，将批处理改为ASCII内容、CRLF换行，调用ASCII命名的共享Python启动器；中文PYW入口保留为别名。Git属性明确CMD使用CRLF。
+
+通过系统cmd.exe从 `out/launcher check 中文` 运行根目录启动CMD，实际退出码0、诊断输出0字节；新pythonw进程建立预期标题窗口，窗口句柄非零、Responding=True，未生成启动错误日志。两个PYW入口通过语法检查。没有更改转换或固件代码，未重复此前已通过的音乐/固件回归；未新增实机验证。
