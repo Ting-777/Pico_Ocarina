@@ -1,6 +1,6 @@
 # 给本地 Codex 的开发交接
 
-## 当前状态（2026-11-10）
+## 当前状态（2026-11-11）
 
 上游基线 9f117b5，开发分支 `feature/configurable-player`。firmware根目录的v1.1 UF2和校验和保持原样；firmware/dev新增1.2-dev测试UF2及SHA256，供GitHub下载，新源码标为1.2-dev。
 
@@ -31,7 +31,7 @@
 1. 复现已通过的ARM构建：本轮本机编译器在out/deps/bin（Arm GNU14.2.Rel1/GCC14.2.1，PICO_TOOLCHAIN_PATH指向out/deps），SDK在out/deps/pico-sdk-2.1.1，TinyUSB沿用固定86ad6e56c1700e85f1c5678607a762cfe3aa2f47。两份ELF及分区断言通过，主RAM静态132044字节、4KiB核心0栈；尚待板上水位验证。
 2. 按 `RUNTIME_CONFIGURATION.md` 用真实Pico验证GP21配置模式、CDC和上传；同一UF2接收full/first、STATUS、断电保留、坏包/中止/断连与真实掉电回退。
 3. Switch/游戏验证USB识别、玩家分配、19音确定按法、独立D-pad/摇杆、重复音与停止回中；保留第一遍低尾句和后续高变体。没有设备时明确记录未验证，继续可做的软件工作。
-4. MIDI导入首版CLI已按用户“试下”实现，见下面记录；之后扩展更多真实MIDI案例、GUI或AI选轨建议。实机通过后再更新正式发布固件。
+4. MIDI导入CLI与Python/Tkinter窗口已实现，见下面记录；之后扩展更多真实MIDI案例或AI选轨建议。实机通过后再更新正式发布固件。
 
 ## 继续前阅读/执行
 
@@ -62,3 +62,17 @@ ctest --test-dir out/bootsel/native-full -C Debug --output-on-failure
 待机长按1秒：L+R半秒 → 全松1秒 → L+R半秒 → 全松1秒 → A半秒 → 全松。src/controller_join.h提供非阻塞序列；长按松开不会启动歌曲，持续按住只执行一次，序列中再次按按钮、USB断连/挂起/协议未就绪均取消。BOOTSEL与GP22等效。
 
 新增controller_join回归；开启MIDI测试的full/first各8/8通过，保留原歌曲和上传回归。新固件/校验和已同步到firmware/dev，当前SHA与内存见RUNTIME_CONFIGURATION.md、VALIDATION.md。没有刷写真实设备。上文MIDI转换段落的“未修改固件/UF2”及上传受阻状态是前一轮历史记录；2026-11-11用户已要求将此前MIDI提交与本次固件修改一并上传到现有feature/configurable-player分支。
+
+## Windows转换窗口与横向布局（2026-11-11）
+
+入口为根目录 `启动转换器.cmd` / `陶笛转换器.pyw`。使用步骤集中在 `开始使用.md` 的MIDI部分，命令行详细步骤默认折叠。需要带Tk的Python3.9或更新版本；缺Mido时可从窗口安装到工程私有 `.deps/python`。
+
+`tools/midi_gui.py` 提供中文左右两栏：左侧轨道列表、原轨试听、结果与文件操作；右侧基础/片段多音页签、保存设置和生成按钮。默认最大1180×680，依据Windows工作区避开任务栏；高级选项通过页签切换，不增加高度。`midi_gui_model.py` 只做表单转换并复用原转换器，`midi_gui_audio.py` 调Windows MCI，JSON试听仍从最终文件生成。读文件、转换、安装组件在后台执行；覆盖前询问，换文件/改参数使旧结果入口失效。上传仍使用独立CLI。
+
+本轮先重跑full/first各8/8，再加入可选 `midi_gui_model`；最终full/first各9/9通过。表单/试听接口生命周期6项、实际Tk窗口5项通过，含1180×680、1080×620、940×580两页签控件边界与示例输出。Windows MCI真实调用能返回playing并关闭；未人工确认扬声器听感。截图工具初始化连续报 `trusted Node process exited unexpectedly`，未完成截图目视检查。没有修改固件/UF2/示例曲目，没有新增真实Pico、Flash或Switch验收记录。
+
+### 启动脚本修复（2026-11-11）
+
+用户实测双击CMD报乱码和“不是内部或外部命令”。原脚本含UTF-8中文及LF换行，未覆盖Windows命令行实际启动。现CMD仅含ASCII，引用ASCII路径 `tools/midi_gui_launcher.pyw`，固定CRLF，并添加 `*.cmd text eol=crlf` 保证检出后的格式。根目录中文PYW改为共享启动器的别名，保留原使用入口。
+
+实际通过Windows cmd.exe运行此CMD，工作目录为工程out下含空格/中文的其他目录：退出0、无诊断输出；新pythonw进程建立“Pico 陶笛 · MIDI 转换器”窗口，Responding=True。共享启动器与中文别名语法检查、Git换行属性和diff检查通过。仅修复启动，不改歌曲转换及固件。

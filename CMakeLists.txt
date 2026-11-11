@@ -75,6 +75,10 @@ if(OCARINA_HOST_TESTS)
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_midi_import.py"
       --checker $<TARGET_FILE:melody_check> --device $<TARGET_FILE:simulated_device>)
     set_tests_properties(midi_import PROPERTIES TIMEOUT 90)
+    add_test(NAME midi_gui_model COMMAND "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_midi_gui_model.py"
+      --checker $<TARGET_FILE:melody_check>)
+    set_tests_properties(midi_gui_model PROPERTIES TIMEOUT 30)
   endif()
   # Keep assertions active for every native build, including Release.
   foreach(target melody protocol_player_tests controller_join_tests melody_tests melody_check store_upload_tests simulated_device)
