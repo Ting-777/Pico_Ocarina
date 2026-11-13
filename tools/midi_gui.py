@@ -149,7 +149,7 @@ class ConverterWindow:
         tracks.grid(row=0, column=0, sticky="nsew")
         tracks.columnconfigure(0, weight=1)
         tracks.rowconfigure(1, weight=1)
-        ttk.Label(tracks, text=tr("1  选择主旋律"), style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 7))
+        ttk.Label(tracks, text=tr("选择主旋律"), style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 7))
         columns = ("track", "channel", "name", "notes", "range", "state")
         self.tree = ttk.Treeview(tracks, columns=columns, show="headings", selectmode="browse", height=5)
         for key, label, width, minimum in zip(columns,
@@ -208,7 +208,7 @@ class ConverterWindow:
         self.settings_tabs.grid(row=0, column=0, sticky="nsew")
         self.basic = ttk.Frame(self.settings_tabs, padding=10, style="Card.TFrame")
         self.advanced = ttk.Frame(self.settings_tabs, padding=10, style="Card.TFrame")
-        self.settings_tabs.add(self.basic, text=tr("2  调整歌曲"))
+        self.settings_tabs.add(self.basic, text=tr("调整歌曲"))
         self.settings_tabs.add(self.advanced, text=tr("片段与多音"))
         basic = self.basic
         basic.columnconfigure((0, 1, 2), weight=1, uniform="fields")
