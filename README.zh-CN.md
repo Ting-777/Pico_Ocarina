@@ -2,14 +2,14 @@
 
 [English](README.md) · **简体中文** · [日本語](README.ja.md)
 
-用 **Raspberry Pi Pico（RP2040）** 模拟Switch有线手柄，自动演奏陶笛。歌曲保存在板上，播放时连接Switch即可。
+用 **Raspberry Pi Pico（RP2040）** 模拟有线手柄，在 **Nintendo Switch 2 的《塞尔达传说：时之笛》** 中自动演奏陶笛。歌曲保存在板上，播放时连接 Switch 2 即可。
 
 包含固件、Windows歌曲管理器和MIDI转换工具。默认歌曲为《友谊地久天长》，56音、42.8秒，播放前倒数3秒。
 
 ## 快速开始
 
 1. [下载固件](firmware/Pico_Ocarina.uf2)，按住BOOTSEL连接电脑，将UF2拖入RPI-RP2磁盘。
-2. 将Pico连接Switch，进入陶笛演奏界面，短按BOOTSEL开始；再次短按停止。
+2. 将Pico连接Switch 2，进入《时之笛》的陶笛演奏界面，短按BOOTSEL开始；再次短按停止。
 3. 换歌时双击 [启动转换器.cmd](启动转换器.cmd)，加载JSON或转换MIDI，再上传到Pico。
 
 详细步骤见 [开始使用](开始使用.md)。

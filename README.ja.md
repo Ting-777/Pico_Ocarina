@@ -2,14 +2,14 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md) · **日本語**
 
-**Raspberry Pi Pico（RP2040）**をSwitchの有線コントローラーとして使い、オカリナの曲を自動演奏します。曲は基板に保存され、再生時はSwitchにつなぐだけです。
+**Raspberry Pi Pico（RP2040）**を有線コントローラーとして使い、**Nintendo Switch 2の『ゼルダの伝説 時のオカリナ』**でオカリナの曲を自動演奏します。曲は基板に保存され、再生時はSwitch 2につなぐだけです。
 
 ファームウェア、Windows用の曲管理アプリ、MIDI変換ツールを収録しています。内蔵曲は「蛍の光（Auld Lang Syne）」で、56音、42.8秒、開始待ち3秒です。
 
 ## はじめに
 
 1. [ファームウェア](firmware/Pico_Ocarina.uf2)をダウンロードします。BOOTSELを押しながらPicoをPCにつなぎ、UF2をRPI-RP2ドライブにコピーします。
-2. PicoをSwitchにつなぎ、ゲームのオカリナ演奏画面を開きます。BOOTSELの短押しで再生・停止します。
+2. PicoをSwitch 2につなぎ、ゲームのオカリナ演奏画面を開きます。BOOTSELの短押しで再生・停止します。
 3. 曲を変えるには[Launch.cmd](Launch.cmd)を開き、JSONを読み込むかMIDIを変換してPicoに転送します。
 
 配線と転送の手順は[使い方](docs/GettingStarted.ja.md)をご覧ください。

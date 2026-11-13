@@ -2,14 +2,14 @@
 
 **English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
-Use a **Raspberry Pi Pico (RP2040)** as a wired Switch controller to play ocarina songs. Songs are stored on the board; connect it to the Switch to play.
+Use a **Raspberry Pi Pico (RP2040)** as a wired controller to automatically play ocarina songs in **The Legend of Zelda: Ocarina of Time** on **Nintendo Switch 2**. Songs are stored on the board.
 
 Includes firmware, a Windows song manager and MIDI conversion tools. The built-in song is **Auld Lang Syne**: 56 notes, 42.8 seconds and a separate 3-second count-in.
 
 ## Quick start
 
 1. [Download the firmware](firmware/Pico_Ocarina.uf2). Hold BOOTSEL while connecting the Pico to your PC, then copy the UF2 to the RPI-RP2 drive.
-2. Connect the Pico to the Switch and open the game's ocarina screen. Tap BOOTSEL to start or stop playback.
+2. Connect the Pico to the Switch 2 and open the game's ocarina screen. Tap BOOTSEL to start or stop playback.
 3. To change songs, open [Launch.cmd](Launch.cmd), load a JSON song or convert a MIDI, then upload it to the Pico.
 
 See [Getting started](docs/GettingStarted.md) for wiring and upload instructions.
