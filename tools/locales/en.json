@@ -246,7 +246,6 @@
   "试听结束必须在开始之后": "Preview end must be after its start",
   "试听范围必须有正时长": "Preview range must have a positive duration",
   "试听选段": "Preview selection",
-  "语言": "Language",
   "请先安装 pyserial：python -m pip install pyserial": "Install pyserial first: python -m pip install pyserial",
   "请先运行 python -m pip install -r tools/requirements-midi.txt": "First run: python -m pip install -r tools/requirements-midi.txt",
   "请在图形选段窗口重新选择音域框": "Select the pitch window again in the passage dialog",

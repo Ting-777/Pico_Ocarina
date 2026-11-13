@@ -246,7 +246,6 @@
   "试听结束必须在开始之后": "試聴の終了位置は開始位置より後にしてください",
   "试听范围必须有正时长": "試聴範囲の長さは正の値にしてください",
   "试听选段": "範囲を試聴",
-  "语言": "言語",
   "请先安装 pyserial：python -m pip install pyserial": "先にpyserialをインストールしてください：python -m pip install pyserial",
   "请先运行 python -m pip install -r tools/requirements-midi.txt": "先に実行してください：python -m pip install -r tools/requirements-midi.txt",
   "请在图形选段窗口重新选择音域框": "範囲選択画面で音域枠を選び直してください",

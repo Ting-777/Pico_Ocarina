@@ -126,7 +126,8 @@ class ConverterWindow:
         self.language_combo.pack(side="right", padx=(8, 12))
         self.language_combo.bind("<<ComboboxSelected>>", self._change_language)
         self.controls.append(self.language_combo)
-        ttk.Label(header, text=tr("语言"), style="Hint.TLabel").pack(side="right")
+        # Keep the selector discoverable regardless of the current UI language.
+        ttk.Label(header, text="Language", style="Hint.TLabel").pack(side="right")
         ttk.Label(outer, textvariable=self.file, width=1, anchor="w",
                   style="Hint.TLabel").grid(row=1, column=0, sticky="ew", pady=(6, 10))
 
