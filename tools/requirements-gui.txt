@@ -1,0 +1,2 @@
+-r requirements-midi.txt
+pyserial==3.5

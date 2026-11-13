@@ -2,7 +2,7 @@
 #include "SwitchProDescriptors.h"
 #include <cstring>
 #include "usb_mode.h"
-// Development CDC identity, exposed only in the explicit configuration mode.
+// CDC interface used in configuration mode.
 static const tusb_desc_device_t config_device={
  sizeof(tusb_desc_device_t), TUSB_DESC_DEVICE, 0x0200,
  TUSB_CLASS_MISC, MISC_SUBCLASS_COMMON, MISC_PROTOCOL_IAD,
@@ -19,7 +19,7 @@ extern "C" uint8_t const* tud_hid_descriptor_report_cb(uint8_t){return switch_pr
 extern "C" uint8_t const* tud_descriptor_configuration_cb(uint8_t){return ocarina_config_mode ? config_descriptor : switch_pro_configuration_descriptor;}
 extern "C" uint16_t const* tud_descriptor_string_cb(uint8_t index,uint16_t){
  static uint16_t out[33];if(index==0){out[0]=0x0304;out[1]=0x0409;return out;}
- const char* values[]={nullptr,"Pico Ocarina","Pro Controller","QRE-PICO-0001"};
+ const char* values[]={nullptr,"Pico Ocarina","Pro Controller","PICO-OCARINA-0001"};
  if(index>=4)return nullptr;
  const char* value=(ocarina_config_mode&&index==2)?"Pico Ocarina Config":values[index];
  size_t n=std::strlen(value);if(n>32)n=32;

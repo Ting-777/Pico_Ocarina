@@ -14,8 +14,11 @@ def request(port, command):
     port.flush()
     raw = port.readline(513)
     if not raw.endswith(b"\n") or len(raw) > 512:
-        raise ProtocolError("设备回复超时或长度异常；歌曲提交状态请用 --status 确认")
-    reply = raw.decode("ascii").strip()
+        raise ProtocolError("设备回复超时或长度异常；请读取设备状态确认是否已保存")
+    try:
+        reply = raw.decode("ascii").strip()
+    except UnicodeError as error:
+        raise ProtocolError("设备回复无法识别，请确认选择了Pico配置模式的串口") from error
     if not reply.startswith("OK "):
         raise ProtocolError(reply)
     if reply.split()[1] != command.split()[0]:
@@ -25,23 +28,32 @@ def request(port, command):
 def fields(reply):
     return dict(part.split("=", 1) for part in reply.split()[2:] if "=" in part)
 
-def upload(port, data):
+def upload(port, data, progress=None):
     if not 0 < len(data) <= MAX_BYTES:
         raise ValueError("文件必须为 1–65536 字节")
     # Device validation is authoritative; no Python float/schema conversion.
     crc = binascii.crc32(data) & 0xffffffff
+    def report(stage, received=0):
+        if progress:
+            progress(stage, received, len(data))
+    report("handshake")
     hello = fields(request(port, "HELLO"))
     if hello.get("protocol") != "1":
         raise ProtocolError("不支持的设备协议版本")
     request(port, "BEGIN %d %08x" % (len(data), crc))
+    report("transfer")
     for offset in range(0, len(data), 256):
         reply = fields(request(port, "DATA %d %s" % (offset, data[offset:offset + 256].hex())))
         if int(reply.get("received", "-1")) != min(offset + 256, len(data)):
             raise ProtocolError("设备接收偏移不匹配")
+        report("transfer", int(reply["received"]))
+    report("validate", len(data))
     request(port, "VALIDATE")
+    report("commit", len(data))
     committed = fields(request(port, "COMMIT"))
     if int(committed.get("bytes", "-1")) != len(data) or int(committed.get("crc", "-1"), 16) != crc:
         raise ProtocolError("提交摘要不匹配")
+    report("verify", len(data))
     status = request(port, "STATUS")
     saved = fields(status)
     if (saved.get("saved") != "1" or int(saved.get("bytes", "-1")) != len(data)

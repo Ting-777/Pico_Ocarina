@@ -1,32 +1,42 @@
 # Pico Ocarina
 
-用普通 **Raspberry Pi Pico（RP2040）** 模拟有线手柄，让游戏里的陶笛自动演奏。歌曲保存在 Pico 上；换歌时连接 Windows 上传，播放时连接 Switch。
+用 **Raspberry Pi Pico（RP2040）** 模拟Switch有线手柄，自动演奏陶笛。歌曲保存在板上，播放时连接Switch即可。
 
-**从这里开始：[使用说明：刷入 → 上传歌曲 → 播放](开始使用.md)**
+包含固件、Windows歌曲管理器和MIDI转换工具。默认歌曲为《友谊地久天长》，56音、42.8秒，播放前倒数3秒。
 
-已经编译好的测试固件：[下载 Pico_Ocarina_Configurable_v1_2_dev.uf2](firmware/dev/Pico_Ocarina_Configurable_v1_2_dev.uf2)。首次使用直接刷入，不需要先搭建编译环境。
+## 快速开始
 
-## 现在可以怎么用
+1. [下载固件](firmware/Pico_Ocarina.uf2)，按住BOOTSEL连接电脑，将UF2拖入RPI-RP2磁盘。
+2. 将Pico连接Switch，进入陶笛演奏界面，短按BOOTSEL开始；再次短按停止。
+3. 换歌时双击 [启动转换器.cmd](启动转换器.cmd)，加载JSON或转换MIDI，再上传到Pico。
 
-1. **第一次**：按住 BOOTSEL 接电脑，把上述 UF2 拖进 RPI-RP2 磁盘。
-2. **试播**：不接跳线，接 Switch，进入陶笛自由演奏界面，短按 BOOTSEL。内置《皇后大道东》完整版。
-3. **以后换歌**：断电时连接 GP21–GND，接 Windows 上传 JSON 歌曲文件；上传后断电取下跳线，再接 Switch 播放。详细针脚、COM 号和可复制命令见 [使用说明](开始使用.md)。
+详细步骤见 [开始使用](开始使用.md)。
 
-切换有线手柄：待机长按 BOOTSEL 约 1 秒，自动按 **L+R → 松开等 1 秒 → L+R → 松开等 1 秒 → A**；每次按住半秒，结束后全部松开。完成后短按播放，执行中再次按可中止。
+## 按键
 
-**转换自己的 MIDI：双击 [启动转换器.cmd](启动转换器.cmd)**，在窗口里选轨、试听、调整并生成 JSON。首次可点“试用短版”→“生成歌曲文件”。需要 Python 3.9 或更新版本；详细步骤见 [MIDI转换步骤](开始使用.md#把-midi-转成歌曲文件)。
-
-**这是开发测试版：软件测试、编译及固件文件检查已通过；真实 Pico、Windows USB 和 Switch 游戏尚未实测。** `firmware/dev/` 是支持上传换歌的新测试版；`firmware/` 根目录的 v1.1 只能播放内置歌曲。
-
-## 开发资料
-
-| 要做什么 | 看哪份 |
+| 操作 | 功能 |
 |---|---|
-| 编译、运行测试 | [构建说明](docs/BUILDING.md) |
-| 继续开发 | [开发交接](docs/HANDOFF.md)、[开发阶段设计](docs/CONFIGURABLE_DESIGN.md) |
-| 了解歌曲文件格式 | [文件格式](docs/MELODY_FILE_FORMAT.md) |
-| 查上传协议、保存结构和内存数据 | [开发参考](docs/RUNTIME_CONFIGURATION.md) |
-| 查哪些测试做过、哪些没做 | [验证记录](VALIDATION.md) |
-| 核对主旋律和指法 | [旋律来源](docs/MUSIC_AND_PROVENANCE.md)、[指法参考](docs/FULL_FINGERING_REFERENCE.md) |
+| 短按BOOTSEL | 开始或停止播放 |
+| 待机长按BOOTSEL约1秒 | 两次L+R，再按A，完成手柄识别流程 |
+| 连接GP21与GND后上电 | 进入电脑配置模式，上传歌曲 |
+| GP22接按钮至GND | 可选外接播放按钮，与BOOTSEL功能相同 |
 
-新增代码采用 MIT 许可；第三方来源及示例歌曲数据说明见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+## 歌曲管理器
+
+- 打开MIDI，选择轨道和通道，支持取最高音或最低音。
+- 拖动时间范围和18半音音域框，定位试听、调整音区。
+- 生成JSON、试听MIDI和处理报告，或直接加载已有JSON。
+- 选择串口上传歌曲，并读取板上保存状态。
+
+Windows需安装Python 3.9或更新版本，并包含Tcl/Tk。依赖可在窗口中安装，也可运行：
+
+```powershell
+python -m pip install -r tools/requirements-gui.txt
+```
+
+## 文档
+
+- [开始使用](开始使用.md)：刷入、播放、上传和常见问题。
+- [MIDI转换与歌曲格式](docs/MIDI转换.md)：选声部、命令行和JSON字段。
+- [构建](docs/构建.md)：从源码生成UF2和桌面校验工具。
+- [第三方许可](THIRD_PARTY.md)。项目代码采用 [MIT许可](LICENSE)。

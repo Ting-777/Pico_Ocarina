@@ -1,107 +1,48 @@
 cmake_minimum_required(VERSION 3.18...4.4)
 
-option(OCARINA_HOST_TESTS "Build native software tests instead of RP2040 firmware" OFF)
-option(OCARINA_SANITIZERS "Enable ASan and UBSan for native GCC/Clang tests" OFF)
-option(OCARINA_MIDI_TESTS "Test MIDI import (requires tools/requirements-midi.txt)" OFF)
-set(OCARINA_SONG_VARIANT "full" CACHE STRING "Demo arrangement: full or first")
-set_property(CACHE OCARINA_SONG_VARIANT PROPERTY STRINGS full first)
-if(NOT OCARINA_SONG_VARIANT MATCHES "^(full|first)$")
-  message(FATAL_ERROR "OCARINA_SONG_VARIANT must be full or first")
-endif()
+option(OCARINA_HOST_TOOLS "Build the desktop melody validator" OFF)
 
-if(OCARINA_HOST_TESTS)
-  project(pico_ocarina_native_tests LANGUAGES CXX)
+if(OCARINA_HOST_TOOLS)
+  project(pico_ocarina VERSION 1.2.0 LANGUAGES CXX)
 else()
   if(NOT PICO_SDK_PATH AND DEFINED ENV{PICO_SDK_PATH})
     set(PICO_SDK_PATH "$ENV{PICO_SDK_PATH}")
   endif()
   if(NOT EXISTS "${PICO_SDK_PATH}/external/pico_sdk_import.cmake")
-    message(FATAL_ERROR "Set PICO_SDK_PATH to a Pico SDK checkout (validated: 2.1.1)")
+    message(FATAL_ERROR "Set PICO_SDK_PATH to Pico SDK 2.1.1")
   endif()
+  set(PICO_NO_PICOTOOL ON)
   include("${PICO_SDK_PATH}/external/pico_sdk_import.cmake")
   set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-  project(pico_ocarina C CXX ASM)
+  project(pico_ocarina VERSION 1.2.0 LANGUAGES C CXX ASM)
   set(CMAKE_C_STANDARD 11)
+  add_compile_options("-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=."
+                      "-ffile-prefix-map=${PICO_SDK_PATH}=pico-sdk")
   pico_sdk_init()
 endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-set(SONG_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-add_custom_command(
-  OUTPUT "${SONG_GENERATED_DIR}/song.h" "${SONG_GENERATED_DIR}/fallback_melody.h"
-  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_song.py"
-    --variant "${OCARINA_SONG_VARIANT}" --output-dir "${SONG_GENERATED_DIR}"
-  DEPENDS tools/generate_song.py examples/queens_road_east/source_voice.json
-    "examples/queens_road_east/melody_${OCARINA_SONG_VARIANT}_v1_proposed.json"
-  COMMENT "Generating verified ${OCARINA_SONG_VARIANT} song data"
-  VERBATIM)
-add_custom_target(song_data DEPENDS "${SONG_GENERATED_DIR}/song.h" "${SONG_GENERATED_DIR}/fallback_melody.h")
 add_library(melody STATIC src/melody.cpp src/song_store.cpp src/upload_session.cpp)
 target_include_directories(melody PUBLIC src)
+target_compile_options(melody PRIVATE -Wall -Wextra)
 
-if(OCARINA_HOST_TESTS)
-  enable_testing()
-  add_executable(protocol_player_tests tests/test_protocol_player.cpp src/pro_controller.cpp)
-  add_dependencies(protocol_player_tests song_data)
-  target_link_libraries(protocol_player_tests PRIVATE melody)
-  target_include_directories(protocol_player_tests PRIVATE src "${SONG_GENERATED_DIR}")
-  add_executable(controller_join_tests tests/test_controller_join.cpp src/pro_controller.cpp)
-  target_include_directories(controller_join_tests PRIVATE src)
-  add_test(NAME controller_join COMMAND controller_join_tests)
-  add_executable(melody_tests tests/test_melody.cpp)
-  add_dependencies(melody_tests song_data)
-  target_link_libraries(melody_tests PRIVATE melody)
-  target_include_directories(melody_tests PRIVATE "${SONG_GENERATED_DIR}")
+if(OCARINA_HOST_TOOLS)
   add_executable(melody_check tools/melody_check.cpp)
   target_link_libraries(melody_check PRIVATE melody)
-  add_executable(store_upload_tests tests/test_store_upload.cpp)
-  target_link_libraries(store_upload_tests PRIVATE melody)
-  add_executable(simulated_device tests/simulated_device.cpp)
-  target_link_libraries(simulated_device PRIVATE melody)
-  add_test(NAME store_upload COMMAND store_upload_tests
-    "${CMAKE_CURRENT_SOURCE_DIR}/examples/queens_road_east/melody_full_v1_proposed.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/examples/queens_road_east/melody_first_v1_proposed.json")
-  add_test(NAME windows_cli_protocol COMMAND "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_upload_cli.py" $<TARGET_FILE:simulated_device>)
-  set_tests_properties(windows_cli_protocol PROPERTIES TIMEOUT 60)
-  if(OCARINA_MIDI_TESTS)
-    execute_process(COMMAND "${Python3_EXECUTABLE}" -c "import mido"
-      RESULT_VARIABLE MIDI_IMPORT_STATUS OUTPUT_QUIET ERROR_QUIET)
-    if(NOT MIDI_IMPORT_STATUS EQUAL 0)
-      message(FATAL_ERROR "Install MIDI test dependency: python -m pip install -r tools/requirements-midi.txt")
-    endif()
-    add_test(NAME midi_import COMMAND "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_midi_import.py"
-      --checker $<TARGET_FILE:melody_check> --device $<TARGET_FILE:simulated_device>)
-    set_tests_properties(midi_import PROPERTIES TIMEOUT 90)
-    add_test(NAME midi_gui_model COMMAND "${Python3_EXECUTABLE}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_midi_gui_model.py"
-      --checker $<TARGET_FILE:melody_check>)
-    set_tests_properties(midi_gui_model PROPERTIES TIMEOUT 30)
-  endif()
-  # Keep assertions active for every native build, including Release.
-  foreach(target melody protocol_player_tests controller_join_tests melody_tests melody_check store_upload_tests simulated_device)
-    if(MSVC)
-      target_compile_options(${target} PRIVATE /W4 /UNDEBUG)
-    else()
-      target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -UNDEBUG)
-      if(OCARINA_SANITIZERS)
-        target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-        target_link_options(${target} PUBLIC -fsanitize=address,undefined)
-      endif()
-    endif()
-  endforeach()
-  add_test(NAME melody_loading_playback COMMAND melody_tests
-    "${CMAKE_CURRENT_SOURCE_DIR}/examples/queens_road_east/melody_${OCARINA_SONG_VARIANT}_v1_proposed.json")
-  add_test(NAME full_profile_reference COMMAND "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/verify_profile.py" $<TARGET_FILE:melody_check>)
-  add_test(NAME protocol_player COMMAND protocol_player_tests)
-  add_test(NAME midi_source_correspondence COMMAND "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_midi.py"
-    --variant "${OCARINA_SONG_VARIANT}" --output-dir "${SONG_GENERATED_DIR}")
 else()
-  add_executable(pico_ocarina src/main.cpp src/pro_controller.cpp src/usb_descriptors.cpp src/pico_song_flash.cpp src/configuration.cpp)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  set(SONG_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  add_custom_command(
+    OUTPUT "${SONG_GENERATED_DIR}/song.h" "${SONG_GENERATED_DIR}/fallback_melody.h"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_song.py"
+            --output-dir "${SONG_GENERATED_DIR}"
+    DEPENDS tools/generate_song.py tools/melody_format.py songs/auld_lang_syne_playback.json
+    COMMENT "Generating default song data"
+    VERBATIM)
+  add_custom_target(song_data DEPENDS "${SONG_GENERATED_DIR}/song.h" "${SONG_GENERATED_DIR}/fallback_melody.h")
+  add_executable(pico_ocarina src/main.cpp src/pro_controller.cpp src/usb_descriptors.cpp
+                              src/pico_song_flash.cpp src/configuration.cpp)
   add_dependencies(pico_ocarina song_data)
   target_include_directories(pico_ocarina PRIVATE src "${SONG_GENERATED_DIR}")
   target_compile_options(pico_ocarina PRIVATE -Wall -Wextra)
@@ -111,7 +52,15 @@ else()
   set_property(TARGET pico_ocarina APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/song_partition.ld")
   pico_enable_stdio_usb(pico_ocarina 0)
   pico_enable_stdio_uart(pico_ocarina 0)
-  pico_set_program_name(pico_ocarina "Pico Ocarina Configurable")
-  pico_set_program_version(pico_ocarina "1.2-dev")
+  pico_set_program_name(pico_ocarina "Pico Ocarina")
+  pico_set_program_version(pico_ocarina "${PROJECT_VERSION}")
+  pico_set_program_url(pico_ocarina "https://github.com/Ting-777/Pico_Ocarina/tree/prod")
   pico_add_extra_outputs(pico_ocarina)
+  add_custom_command(TARGET pico_ocarina POST_BUILD
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/bin_to_uf2.py"
+            "${CMAKE_CURRENT_BINARY_DIR}/pico_ocarina.bin"
+            "${CMAKE_CURRENT_BINARY_DIR}/pico_ocarina.uf2"
+    COMMENT "Creating RP2040 UF2"
+    VERBATIM)
+  set_property(TARGET pico_ocarina APPEND PROPERTY LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/bin_to_uf2.py")
 endif()

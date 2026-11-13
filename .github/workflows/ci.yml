@@ -1,52 +1,56 @@
-name: Build and test
+name: Build
+
 on:
   push:
+    branches: [prod]
   pull_request:
+    branches: [prod]
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  native:
+  desktop:
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        variant: [full, first]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
-      - run: python -m pip install -r tools/requirements-midi.txt
-      - run: >-
-          cmake -S . -B out/native -G Ninja
-          -DOCARINA_HOST_TESTS=ON -DOCARINA_SANITIZERS=ON -DOCARINA_MIDI_TESTS=ON
-          -DOCARINA_SONG_VARIANT=${{ matrix.variant }} -DCMAKE_BUILD_TYPE=Debug
-      - run: cmake --build out/native --parallel
-      - run: ctest --test-dir out/native --output-on-failure
+          python-version: '3.12'
+      - run: python -m pip install -r tools/requirements-gui.txt
+      - run: python -m compileall -q tools 陶笛转换器.pyw
+      - run: cmake -S . -B build/tools -G Ninja -DOCARINA_HOST_TOOLS=ON -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/tools --parallel
+      - run: build/tools/melody_check songs/auld_lang_syne_playback.json
+      - run: python tools/midi_to_melody.py preview songs/auld_lang_syne_playback.json -o build/default.preview.mid
+
   firmware:
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        variant: [full, first]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - name: Install ARM toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib ninja-build
-      - name: Fetch Pico SDK 2.1.1
+      - name: Fetch Pico SDK
         run: |
           git clone --depth 1 --branch 2.1.1 https://github.com/raspberrypi/pico-sdk.git .deps/pico-sdk
           git -C .deps/pico-sdk submodule update --init --depth 1 lib/tinyusb
       - name: Build UF2
         env:
           PICO_SDK_PATH: ${{ github.workspace }}/.deps/pico-sdk
-        run: bash scripts/build.sh ${{ matrix.variant }}
+        run: bash scripts/build.sh
+      - name: Calculate checksum
+        working-directory: build/pico
+        run: sha256sum pico_ocarina.uf2 > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: pico-ocarina-${{ matrix.variant }}
+          name: Pico_Ocarina
           path: |
-            build/${{ matrix.variant }}/pico_ocarina.uf2
-            build/${{ matrix.variant }}/generated/*.mid
-            build/${{ matrix.variant }}/generated/*.csv
+            build/pico/pico_ocarina.uf2
+            build/pico/SHA256SUMS.txt
           if-no-files-found: error

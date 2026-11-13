@@ -1,7 +1,6 @@
 """GUI form adapter; musical decisions stay in midi_to_melody."""
 from dataclasses import dataclass
 from fractions import Fraction
-import json
 from pathlib import Path
 import re
 import midi_to_melody as engine
@@ -18,6 +17,9 @@ class Form:
     polyphony: str = "error"
     overlap: str = "error"
     ignore_expression: bool = False
+    valid_notes_only: bool = False
+    pitch_min: str = ""
+    pitch_max: str = ""
 
 def number(text, label):
     try:
@@ -43,11 +45,20 @@ def settings(score, track, channel, form):
     countdown = number(form.countdown_seconds, "倒数") * 1000000
     if countdown.denominator != 1 or not 0 <= countdown <= 10000000:
         raise MelodyError("倒数须为0–10秒")
+    bounds=[]
+    for text in (form.pitch_min,form.pitch_max):
+        if str(text).strip():
+            if not re.fullmatch(r"\d+",str(text).strip(),flags=re.ASCII):
+                raise MelodyError("请在图形选段窗口重新选择音域框")
+            bounds.append(int(text))
+        else: bounds.append(None)
+    engine.pitch_filter_bounds(*bounds)
     return dict(track=track, channel=channel, title=form.title.strip() or score.source.stem[:80],
         transpose=int(value), speed=speed, countdown_us=int(countdown),
         start_tick=beat_tick(form.start_beat, score.ppq, "开始拍点") or 0,
         end_tick=beat_tick(form.end_beat, score.ppq, "结束拍点"),
-        polyphony=form.polyphony, overlap=form.overlap, ignore_expression=form.ignore_expression)
+        polyphony=form.polyphony, overlap=form.overlap, ignore_expression=form.ignore_expression,
+        valid_notes_only=form.valid_notes_only,pitch_min=bounds[0],pitch_max=bounds[1])
 
 def convert(score, track, channel, form):
     return engine.convert_score(score, **settings(score, track, channel, form))
@@ -69,24 +80,16 @@ def output_path(folder, name):
 def output_files(output):
     return output, output.with_suffix(".preview.mid"), output.with_suffix(".report.json")
 
-def demo(variant):
-    folder = engine.ROOT / "examples/queens_road_east"
-    recipe = json.loads((folder / "import_recipe.json").read_text(encoding="utf-8"))
-    return folder / "source.mid", recipe["source_sha256"], dict(recipe["variants"][variant])
-
-def form_for_demo(score, recipe):
-    return Form(title=recipe["title"], transpose=str(recipe["transpose"]),
-        speed_percent=str(Fraction(recipe["speed"]) * 100),
-        countdown_seconds=str(Fraction(recipe["countdown_us"],1000000)),
-        start_beat=str(Fraction(recipe["start_tick"],score.ppq)),
-        end_beat=str(Fraction(recipe["end_tick"],score.ppq)),
-        polyphony=recipe["polyphony"], overlap=recipe["overlap"])
-
 def summary(document, report):
     seconds = document["duration_us"] / 1000000
+    selection = report.get("polyphony_selection")
+    changed = len(selection["changed_notes"]) if selection else len(report["omitted_notes"])
+    pitch_filter=report.get("pitch_filter")
+    excluded=len(pitch_filter["excluded_notes"]) if pitch_filter else 0
     return ("已生成 %d 个音 · %d分%04.1f秒 · 整体移调 %+d 半音\n"
-            "明确省略的八度叠音：%d 个；为松键缩短的音：%d 个。\n"
-            "上传 .json 文件；试听和详细报告也保存在同一文件夹。" %
+            "音间松键至少120毫秒，新增休止 %.2f 秒。\n"
+            "音域框排除 %d 音；多音取舍 %d 音；缩短 %d 音。" %
             (len(document["notes"]), seconds // 60, seconds % 60,
              document["metadata"]["transpose_semitones_applied"],
-             len(report["omitted_notes"]), len(report["shortened_notes"])))
+             report["release_timing"]["added_rest_us"] / 1000000,
+             excluded, changed, len(report["shortened_notes"])))

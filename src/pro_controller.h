@@ -9,6 +9,9 @@ class ProController {
 public:
  void reset();
  void receive(uint8_t report_id,const uint8_t* data,uint16_t size);
+ // TinyUSB GET_REPORT payload: a nonzero ID is already supplied by TinyUSB.
+ // This read-only snapshot must not dequeue replies or advance IN timing.
+ uint16_t get_report(uint8_t report_id,uint8_t* buffer,uint16_t capacity)const;
  bool prepare(uint32_t now,uint8_t out[64]);
  void sent(uint32_t now);
  bool ready()const{return initialized;}
@@ -19,6 +22,7 @@ private:
  uint32_t lastSent=0;
  uint8_t queue[8][64]{};
  void input(uint8_t out[64],uint8_t id)const;
+ void controls(uint8_t out[64])const;
  void identify(uint8_t out[64])const;
  void push(const uint8_t data[64]);
 };

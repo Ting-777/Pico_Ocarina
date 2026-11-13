@@ -74,9 +74,8 @@ def encode_document(document):
         raise MelodyError("歌曲文件超过64KiB，请缩短片段；4096音与文件大小上限同时生效")
     return data
 
-def read_document(path):
-    with Path(path).open("rb") as file:
-        data = file.read(MAX_BYTES + 1)
+def decode_document(data):
+    """Validate the exact bytes that will be uploaded, without re-encoding them."""
     if not data or len(data) > MAX_BYTES:
         raise MelodyError("歌曲文件必须为1–65536字节")
     def unique(pairs):
@@ -94,6 +93,10 @@ def read_document(path):
         raise MelodyError("无法读取歌曲JSON: %s" % error) from error
     encode_document(document)
     return document
+
+def read_document(path):
+    with Path(path).open("rb") as file:
+        return decode_document(file.read(MAX_BYTES + 1))
 
 def preview_bytes(document):
     """Return preview bytes plus measured quantization error; never re-import MIDI."""

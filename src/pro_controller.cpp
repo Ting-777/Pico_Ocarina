@@ -6,12 +6,23 @@ void ProController::reset(){state={};initialized=false;identified=false;sequence
 static void pack(uint8_t* dst,uint16_t x,uint16_t y){dst[0]=x&255;dst[1]=((x>>8)&15)|((y&15)<<4);dst[2]=(y>>4)&255;}
 void ProController::input(uint8_t out[64],uint8_t id)const{
  std::memset(out,0,64);out[0]=id;out[1]=sequence;out[2]=0x81;
+ controls(out);out[12]=9;
+}
+void ProController::controls(uint8_t out[64])const{
  out[3]=state.right;out[4]=state.shared|0x80;out[5]=state.left;
- pack(out+6,state.lx,state.ly);pack(out+9,state.rx,state.ry);out[12]=9;
+ pack(out+6,state.lx,state.ly);pack(out+9,state.rx,state.ry);
 }
 void ProController::identify(uint8_t out[64])const{
  std::memset(out,0,64);out[0]=0x81;out[1]=1;out[3]=3;
  const uint8_t mac[6]={0x12,0x34,0x56,0x8a,0xbb,0x7c};std::memcpy(out+4,mac,6);
+}
+uint16_t ProController::get_report(uint8_t id,uint8_t* buffer,uint16_t capacity)const{
+ if(!buffer||!capacity||(id!=0&&id!=0x30&&id!=0x81))return 0;
+ uint8_t report[64];
+ if(id==0x81)identify(report);else input(report,0x30);
+ const uint16_t offset=id?1:0;
+ const uint16_t length=std::min<uint16_t>(capacity,64-offset);
+ std::memcpy(buffer,report+offset,length);return length;
 }
 void ProController::push(const uint8_t data[64]){if(count==8)return;std::memcpy(queue[(head+count)%8],data,64);count++;}
 void ProController::receive(uint8_t id,const uint8_t* data,uint16_t size){
@@ -61,7 +72,14 @@ void ProController::receive(uint8_t id,const uint8_t* data,uint16_t size){
  push(out);
 }
 bool ProController::prepare(uint32_t now,uint8_t out[64]){
- if(count){std::memcpy(out,queue[head],64);if(out[0]!=0x81)out[1]=sequence;preparedQueue=true;return true;}
+ if(count){
+  std::memcpy(out,queue[head],64);
+  // A subcommand reply also carries live controller input. Never replay the
+  // old controls captured before it waited for the USB IN endpoint.
+  if(out[0]==0x21)controls(out);
+  if(out[0]!=0x81)out[1]=sequence;
+  preparedQueue=true;return true;
+ }
  if(!identified){identify(out);preparedQueue=false;return true;}
  if(initialized&&uint32_t(now-lastSent)>=8){input(out,0x30);preparedQueue=false;return true;}
  return false;

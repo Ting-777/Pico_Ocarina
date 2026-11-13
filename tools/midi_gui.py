@@ -8,16 +8,21 @@ import sys
 import tempfile
 import threading
 import traceback
+from fractions import Fraction
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import midi_to_melody as engine
 import midi_gui_model as model
+import midi_gui_device as device
 from midi_gui_audio import MidiPlayer
+from midi_gui_range import RangeDialog
+from melody_format import preview_bytes
 
 ROOT = engine.ROOT
 PRIVATE_DEPS = ROOT / ".deps/python"
-POLYPHONY = {"遇到同时多音时提示": "error", "仅八度叠音取高音": "octave-highest"}
+POLYPHONY = {"遇到同时多音时提示": "error", "全部取最高音": "highest",
+             "全部取最低音": "lowest", "仅八度叠音取高音": "octave-highest"}
 OVERLAP = {"遇到重叠时提示": "error", "缩短前音，留出40ms松键": "trim"}
 
 class ConverterWindow:
@@ -26,6 +31,19 @@ class ConverterWindow:
         self.score = None
         self.rows = {}
         self.result = None
+        self.range_dialog = None
+        self.recovery_dialog = None
+        self._range_cache = None
+        self._range_offset_ms = 0
+        self._range_pending = None
+        self._audio_generation = 0
+        self.valid_notes_only = False
+        self.operation = None
+        self.song = None
+        self.song_kind = None
+        self.uploading = False
+        self.loading_song = False
+        self.port_choices = {}
         self.busy = False
         self.closing = False
         self.updating = False
@@ -33,13 +51,18 @@ class ConverterWindow:
         self.controls = []
         self.player = MidiPlayer()
         self.preview_directory = tempfile.TemporaryDirectory(prefix="pico-ocarina-")
-        self.file = tk.StringVar(value="先打开一个MIDI文件，或用右侧示例试一次")
+        self.file = tk.StringVar(value="打开 MIDI 进行转换，或加载已有 JSON 后直接上传。")
+        self.port = tk.StringVar()
+        self.upload_status = tk.StringVar(value="先加载 JSON，或生成歌曲文件，再选择串口上传。")
         self.title = tk.StringVar()
         self.transpose = tk.StringVar(value="0")
         self.speed = tk.StringVar(value="100")
         self.countdown = tk.StringVar(value="3")
         self.start = tk.StringVar()
         self.end = tk.StringVar()
+        self.pitch_min = tk.StringVar()
+        self.pitch_max = tk.StringVar()
+        self.pitch_hint = tk.StringVar(value="空拍点 = 整轨")
         self.polyphony = tk.StringVar(value=next(iter(POLYPHONY)))
         self.overlap = tk.StringVar(value=next(iter(OVERLAP)))
         self.ignore_expression = tk.BooleanVar(value=False)
@@ -51,8 +74,10 @@ class ConverterWindow:
         self.audio_status = tk.StringVar()
         self._build()
         for variable in (self.title, self.transpose, self.speed, self.countdown, self.start, self.end,
-                         self.polyphony, self.overlap, self.ignore_expression, self.folder, self.filename):
+                         self.polyphony, self.overlap, self.ignore_expression, self.folder, self.filename,
+                         self.pitch_min,self.pitch_max):
             variable.trace_add("write", self._changed)
+        self.port.trace_add("write", self._port_changed)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.report_callback_exception = self._callback_error
         self._poll_id = self.root.after(80, self._poll)
@@ -60,7 +85,7 @@ class ConverterWindow:
 
     def _build(self):
         root = self.root
-        root.title("Pico 陶笛 · MIDI 转换器")
+        root.title("Pico 陶笛 · 歌曲管理器")
         root.configure(background="#f3f6fa")
         style = ttk.Style(root)
         style.theme_use("clam")
@@ -87,13 +112,11 @@ class ConverterWindow:
         outer.rowconfigure(2, weight=1)
         header = ttk.Frame(outer)
         header.grid(row=0, column=0, sticky="ew")
-        ttk.Label(header, text="MIDI 转成陶笛歌曲", style="Title.TLabel").pack(side="left")
-        self.full_button = self._button(header, "试用完整版", lambda: self.load_demo("full"))
-        self.full_button.pack(side="right")
-        self.first_button = self._button(header, "试用短版", lambda: self.load_demo("first"))
-        self.first_button.pack(side="right", padx=7)
+        ttk.Label(header, text="陶笛歌曲 · 转换与上传", style="Title.TLabel").pack(side="left")
         self.open_button = self._button(header, "打开 MIDI…", self.choose_file)
         self.open_button.pack(side="right")
+        self.json_button = self._button(header, "加载 JSON…", self.choose_json)
+        self.json_button.pack(side="right", padx=7)
         ttk.Label(outer, textvariable=self.file, width=1, anchor="w",
                   style="Hint.TLabel").grid(row=1, column=0, sticky="ew", pady=(6, 10))
 
@@ -140,6 +163,8 @@ class ConverterWindow:
         bottom.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.audition_button = self._button(bottom, "试听原轨", self.audition)
         self.audition_button.pack(side="left")
+        self.range_button = self._button(bottom, "拖动选择片段…", self.open_range)
+        self.range_button.pack(side="left", padx=6)
         self.stop_button = ttk.Button(bottom, text="停止试听", command=self.stop_audio)
         self.stop_button.pack(side="left", padx=6)
         ttk.Label(bottom, textvariable=self.audio_status, width=1,
@@ -151,14 +176,14 @@ class ConverterWindow:
         result = ttk.Frame(self.left, style="Card.TFrame", padding=8)
         result.grid(row=1, column=0, sticky="ew", pady=(10, 0))
         result.columnconfigure(0, weight=1)
-        ttk.Label(result, text="3  转换结果", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(result, text="当前歌曲", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         self.result_label = ttk.Label(result, textvariable=self.result_text, width=1,
                                      wraplength=550, justify="left", style="Card.TLabel")
         self.result_label.grid(row=1, column=0, sticky="ew", pady=(5, 8))
         actions = ttk.Frame(result, style="Card.TFrame")
         actions.grid(row=2, column=0, sticky="ew")
         actions.columnconfigure((0, 1), weight=1, uniform="actions")
-        self.preview_button = self._button(actions, "试听转换结果", self.preview_result)
+        self.preview_button = self._button(actions, "试听当前歌曲", self.preview_result)
         self.preview_button.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         self.folder_button = self._button(actions, "打开输出文件夹", self.open_folder)
         self.folder_button.grid(row=0, column=1, sticky="ew")
@@ -167,6 +192,7 @@ class ConverterWindow:
         self.report_button = self._button(actions, "查看处理报告", self.open_report)
         self.report_button.grid(row=1, column=1, sticky="ew", pady=(5, 0))
 
+        midi_controls_start = len(self.controls)
         self.settings_tabs = ttk.Notebook(self.right)
         self.settings_tabs.grid(row=0, column=0, sticky="nsew")
         self.basic = ttk.Frame(self.settings_tabs, padding=10, style="Card.TFrame")
@@ -182,7 +208,7 @@ class ConverterWindow:
                                         (2, "倒数 / 秒", self.countdown)):
             ttk.Label(basic, text=label, style="Card.TLabel").grid(row=2, column=column, sticky="w", padx=(0, 6))
             self._entry(basic, variable, 5).grid(row=3, column=column, sticky="ew", padx=(0, 6), pady=(4, 0))
-        ttk.Label(basic, text="移调 0 = 原调；+5 = 升5半音。\n速度 80% 更慢。不会自动折八度。",
+        ttk.Label(basic, text="移调 +5 = 升5半音；速度80%更慢。\n音间隔至少120毫秒，保持音长并顺延。",
                   style="Card.TLabel", justify="left").grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
         advanced = self.advanced
@@ -190,8 +216,12 @@ class ConverterWindow:
         for column, label, variable in ((0, "开始拍点", self.start), (1, "结束拍点", self.end)):
             ttk.Label(advanced, text=label, style="Card.TLabel").grid(row=0, column=column, sticky="w")
             self._entry(advanced, variable, 8).grid(row=1, column=column, sticky="ew", padx=(0, 6), pady=(3, 0))
-        ttk.Label(advanced, text="留空为整轨；四分音符从0计数，非小节号。",
-                  style="Card.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(5, 9))
+        band_status=ttk.Frame(advanced,style="Card.TFrame")
+        band_status.grid(row=2,column=0,columnspan=2,sticky="ew",pady=(5,9))
+        band_status.columnconfigure(0,weight=1)
+        ttk.Label(band_status,textvariable=self.pitch_hint,style="Card.TLabel").grid(row=0,column=0,sticky="w")
+        self.clear_pitch_button=self._button(band_status,"取消音域框",self.clear_pitch_filter)
+        self.clear_pitch_button.grid(row=0,column=1,sticky="e")
         ttk.Label(advanced, text="同时多音", style="Card.TLabel").grid(row=3, column=0, sticky="w")
         self._combo(advanced, self.polyphony, list(POLYPHONY), 21).grid(row=3, column=1, sticky="ew", pady=(0, 7))
         ttk.Label(advanced, text="连奏重叠", style="Card.TLabel").grid(row=4, column=0, sticky="w")
@@ -202,6 +232,7 @@ class ConverterWindow:
         self.controls.append(expressive)
 
         save = ttk.Frame(self.right, padding=10, style="Card.TFrame")
+        self.save_panel = save
         save.grid(row=1, column=0, sticky="ew", pady=(10, 0))
         save.columnconfigure(1, weight=1)
         ttk.Label(save, text="保存到", style="Section.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8))
@@ -212,18 +243,22 @@ class ConverterWindow:
         ttk.Label(save, text="同时保存 JSON、试听 MIDI 和报告", style="Card.TLabel").grid(row=2, column=0, columnspan=3, sticky="w", pady=(6, 0))
         self.generate_button = self._button(self.right, "生成歌曲文件", self.generate, style="Accent.TButton")
         self.generate_button.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        self.midi_controls = self.controls[midi_controls_start:]
+        self._build_upload_panel()
+        self.settings_tabs.bind("<<NotebookTabChanged>>", self._tab_changed)
 
         self.progress = ttk.Progressbar(outer, mode="indeterminate")
         self.progress.grid(row=3, column=0, sticky="ew", pady=(10, 5))
         footer = ttk.Frame(outer)
         footer.grid(row=4, column=0, sticky="ew")
-        self.install_button = ttk.Button(footer, text="安装转换组件", command=self.install_dependency)
+        self.install_button = ttk.Button(footer, text="安装所需组件", command=self.install_dependency)
         ttk.Label(footer, textvariable=self.status, width=1, style="Hint.TLabel").pack(side="left", fill="x", expand=True)
         try:
             engine.require_mido()
+            device.require_serial()
         except Exception:
             self.install_button.pack(side="right")
-            self.status.set("首次使用：点击“安装转换组件”，组件只安装到本工程文件夹。")
+            self.status.set("可点击“安装所需组件”；JSON加载不需要转换组件。")
 
         # Labels follow the available column width rather than enlarging the window.
         def wrap_left(event):
@@ -232,6 +267,42 @@ class ConverterWindow:
             self.result_label.configure(wraplength=width)
         self.left.bind("<Configure>", wrap_left)
         self._fit_window()
+
+    def _build_upload_panel(self):
+        self.upload_tab = ttk.Frame(self.settings_tabs, padding=10, style="Card.TFrame")
+        self.settings_tabs.add(self.upload_tab, text="上传到 Pico")
+        self.upload_tab.columnconfigure(0, weight=1)
+        wiring = ttk.Label(self.upload_tab, text="断电连接 GP21–GND，再接电脑并选择串口。\n完成后断电取下跳线，再接 Switch。",
+                           width=1, style="Card.TLabel", justify="left")
+        wiring.grid(row=0, column=0, sticky="ew", pady=(0, 7))
+        ports = ttk.Frame(self.upload_tab, style="Card.TFrame")
+        ports.grid(row=1, column=0, sticky="ew")
+        ports.columnconfigure(0, weight=1)
+        self.port_combo = ttk.Combobox(ports, textvariable=self.port, width=1)
+        self.port_combo.grid(row=0, column=0, sticky="ew")
+        self.controls.append(self.port_combo)
+        self.refresh_ports_button = self._button(ports, "刷新串口", self.refresh_ports)
+        self.refresh_ports_button.grid(row=0, column=1, padx=(6, 0))
+        self.upload_button = self._button(self.upload_tab, "上传当前歌曲到 Pico", self.upload_song,
+                                         style="Accent.TButton")
+        self.upload_button.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        self.device_status_button = self._button(self.upload_tab, "读取设备状态", self.read_device_status)
+        self.device_status_button.grid(row=3, column=0, sticky="ew", pady=(6, 0))
+        state = ttk.Label(self.upload_tab, textvariable=self.upload_status, width=1,
+                          style="Card.TLabel", justify="left")
+        state.grid(row=4, column=0, sticky="ew", pady=(7, 0))
+        def wrap(event):
+            wiring.configure(wraplength=max(220, event.width - 24))
+            state.configure(wraplength=max(220, event.width - 24))
+        self.upload_tab.bind("<Configure>", wrap)
+
+    def _tab_changed(self, event=None):
+        if self.settings_tabs.select() == str(self.upload_tab):
+            self.save_panel.grid_remove()
+            self.generate_button.grid_remove()
+        else:
+            self.save_panel.grid()
+            self.generate_button.grid()
 
     def _fit_window(self):
         """Fit the client area inside the desktop work area, including taskbar space."""
@@ -274,21 +345,40 @@ class ConverterWindow:
     def _refresh(self):
         for control in self.controls:
             control.state(["disabled"] if self.busy else ["!disabled"])
+        if self.score is None:
+            for control in self.midi_controls:
+                control.state(["disabled"])
         row=self.selection()
-        valid=not self.busy and self.score is not None and row is not None and not row["drum_channel"] and not row["errors"]
+        valid=not self.busy and self.score is not None and row is not None and not row["drum_channel"] and bool(row["notes"])
         self.generate_button.state(["!disabled"] if valid else ["disabled"])
-        self.audition_button.state(["!disabled"] if valid else ["disabled"])
-        for button in (self.preview_button,self.folder_button,self.copy_button,self.report_button):
+        self.audition_button.state(["!disabled"] if valid and not row["errors"] else ["disabled"])
+        self.range_button.state(["!disabled"] if valid else ["disabled"])
+        for button in (self.folder_button,self.copy_button):
             button.state(["!disabled"] if self.result and not self.busy else ["disabled"])
+        self.preview_button.state(["!disabled"] if self.song and not self.busy else ["disabled"])
+        self.report_button.state(["!disabled"] if self.result and self.result[2] and not self.busy else ["disabled"])
+        port = bool(self.selected_port())
+        self.upload_button.state(["!disabled"] if self.song and port and not self.busy else ["disabled"])
+        self.device_status_button.state(["!disabled"] if port and not self.busy else ["disabled"])
         self.install_button.state(["disabled"] if self.busy else ["!disabled"])
         self.tree.state(["disabled"] if self.busy else ["!disabled"])
         self.stop_button.state(["!disabled"] if self.player.opened else ["disabled"])
+        active=bool(self.pitch_min.get() and self.pitch_max.get())
+        self.clear_pitch_button.state(["!disabled"] if active and self.score and not self.busy else ["disabled"])
+        try:
+            text="框内 %s–%s"%(engine.note_name(int(self.pitch_min.get())),engine.note_name(int(self.pitch_max.get()))) if active else "空拍点 = 整轨"
+        except ValueError: text="请重新选择音域框"
+        self.pitch_hint.set(text)
+
+    def clear_pitch_filter(self):
+        self.pitch_min.set("");self.pitch_max.set("")
 
     def _changed(self, *args):
         if self.updating or self.busy:
             return
-        if self.result:
-            self.result=None
+        if self.result and self.song_kind == "midi":
+            self.stop_audio()
+            self._clear_song()
             self.result_text.set("参数已改动，请重新生成；已保存的文件仍在原位置。")
         self._refresh()
 
@@ -299,27 +389,44 @@ class ConverterWindow:
         if not row:
             self._refresh()
             return
+        self._dismiss_range()
         self.stop_audio()
-        self.result=None
+        self._clear_song()
+        self.clear_pitch_filter()
         self.result_text.set("已选择轨道 %d / 通道 %d，试听后确认主旋律。" % (row["track"],row["channel"]))
         options=row["transpose_options"]
+        if options and 0 not in options:
+            self.transpose.set(str(min(options,key=lambda value:(abs(value),value))))
         shift="整轨可移调：" + (("、".join("%+d" % n for n in options)) if options else "整轨音域太宽，可尝试截取片段")
         problems=[]
         if row["drum_channel"]: problems.append("GM鼓通道，不能作为陶笛旋律")
         if row["errors"]: problems.append("音符配对异常")
         if row["simultaneous_groups"]: problems.append("%d处同时多音，需要明确处理" % row["simultaneous_groups"])
-        self.hint.set("；".join(problems+[shift])+"。片段的可用范围以生成时检查为准。")
+        self.hint.set("；".join(problems+[shift])+"。可点击“拖动选择片段”边听边选。")
         self.updating=True
         self.filename.set(self.score.source.stem[:48]+"_t%d_c%d"%(row["track"],row["channel"]))
         self.updating=False
         self._refresh()
 
-    def _run(self, label, work, done):
+    def _clear_song(self):
+        self.result = None
+        self.song = None
+        self.song_kind = None
+        self.upload_status.set("先加载 JSON，或生成歌曲文件，再选择串口上传。")
+        self.progress.configure(value=0)
+
+    def _run(self, label, work, done, determinate=False, song_load=False, operation=None):
         if self.busy:
             return
         self.busy=True
+        self.operation=operation
+        self.uploading=determinate
+        self.loading_song=song_load
         self.status.set(label)
-        self.progress.start(12)
+        self.progress.stop()
+        self.progress.configure(mode="determinate" if determinate else "indeterminate", value=0, maximum=100)
+        if not determinate:
+            self.progress.start(12)
         self._refresh()
         def worker():
             try:
@@ -329,19 +436,41 @@ class ConverterWindow:
         threading.Thread(target=worker,daemon=True).start()
 
     def _poll(self):
-        try:
-            done,result,error=self.events.get_nowait()
-        except queue.Empty:
-            pass
-        else:
+        while True:
+            try:
+                done,result,error=self.events.get_nowait()
+            except queue.Empty:
+                break
+            if done is None:
+                self._upload_progress(*result)
+                continue
+            was_upload = self.uploading
+            was_load = self.loading_song
+            operation = self.operation
             self.busy=False
+            self.uploading=False
+            self.loading_song=False
+            self.operation=None
             self.progress.stop()
             if error:
                 self.status.set("未完成，请按提示调整后重试。")
-                if self.score is None:
-                    self.result_text.set("未能读取文件，请重新选择 MIDI。")
+                if was_upload:
+                    self.progress.configure(value=0)
+                    self.upload_status.set("未确认保存，可读取设备状态后重试。")
+                if was_load:
+                    self.result_text.set("未能加载歌曲，请重新选择 MIDI 或 JSON。")
                 if not self.closing:
-                    messagebox.showerror("需要调整",str(error),parent=self.root)
+                    if isinstance(error,engine.ConversionIssue):
+                        self._conversion_recovery(error)
+                    elif operation=="convert":
+                        self._show_recovery(str(error),[("拖动选择较短片段",self.open_range),
+                            ("保存到项目输出目录并重试",self._safe_output_and_generate),
+                            ("选择其他保存位置并重试",self._choose_folder_and_generate)])
+                    elif operation=="load_midi":
+                        self._show_recovery(str(error),[("重新选择MIDI文件",self.choose_file),
+                            ("重新读取当前文件",lambda:self.load_file(self.file.get()))])
+                    else:
+                        messagebox.showerror("需要调整",str(error),parent=self.root)
             else:
                 try:
                     done(result)
@@ -352,9 +481,16 @@ class ConverterWindow:
                 self._destroy()
                 return
         if self.player.opened:
-            if not self.player.playing():
-                self.audio_status.set("试听结束")
+            try:
+                if not self.player.playing():
+                    self.audio_status.set("试听结束")
+                    self._refresh()
+            except RuntimeError as error:
+                self.audio_status.set("试听未完成")
+                self.status.set(str(error))
                 self._refresh()
+                if not self.closing:
+                    messagebox.showerror("试听失败",str(error),parent=self.root)
         self._poll_id = self.root.after(100,self._poll)
 
     def choose_file(self):
@@ -363,24 +499,50 @@ class ConverterWindow:
         if filename:
             self.load_file(filename)
 
-    def load_demo(self, variant):
-        source,digest,recipe=model.demo(variant)
-        self.load_file(source,(variant,digest,recipe))
+    def choose_json(self):
+        filename=filedialog.askopenfilename(parent=self.root,title="加载歌曲 JSON",
+            filetypes=[("歌曲 JSON","*.json"),("所有文件","*.*")])
+        if filename:
+            self.load_json(filename)
 
-    def load_file(self, filename, preset=None):
+    def load_json(self, filename):
         if self.busy:
             return
+        self._dismiss_range()
+        self._range_cache=None
+        self.stop_audio()
+        self._clear_song()
+        self.score=None
+        self.rows={}
+        self.tree.delete(*self.tree.get_children())
+        self.file.set(str(filename))
+        self.result_text.set("正在校验歌曲 JSON…")
+        def loaded(song):
+            self.song=song
+            self.song_kind="json"
+            self.result=(song.path,None,None)
+            self.result_text.set("JSON 已校验："+device.song_summary(song))
+            self.hint.set("JSON已加载，可直接试听或上传。")
+            self.upload_status.set("歌曲已就绪，刷新串口或填写 COM 编号后上传。")
+            self.status.set("已加载并校验 JSON："+str(song.path))
+            self.settings_tabs.select(self.upload_tab)
+        self._run("正在加载并校验 JSON…",lambda:device.load_song(filename),loaded,song_load=True)
+
+    def load_file(self, filename, tempo_policy="error"):
+        if self.busy:
+            return
+        self._dismiss_range()
+        self.valid_notes_only=False
         self.stop_audio()
         self.score=None
-        self.result=None
+        self._range_cache=None
+        self._clear_song()
         self.rows={}
         self.tree.delete(*self.tree.get_children())
         self.file.set(str(filename))
         self.result_text.set("正在读取文件…")
         def read():
-            score=engine.read_score(filename)
-            if preset and score.sha256!=preset[1]:
-                raise ValueError("示例MIDI已改变，无法套用已核验的示例设置")
+            score=engine.read_score(filename) if tempo_policy=="error" else engine.read_score(filename,tempo_policy)
             return score,engine.inspect_score(score)
         def loaded(value):
             self.score,inspection=value
@@ -397,40 +559,175 @@ class ConverterWindow:
             self.title.set(self.score.source.stem[:80])
             self.transpose.set("0"); self.speed.set("100"); self.countdown.set("3")
             self.start.set(""); self.end.set("")
+            self.clear_pitch_filter()
             self.polyphony.set(next(iter(POLYPHONY))); self.overlap.set(next(iter(OVERLAP)))
             self.ignore_expression.set(False)
             self.updating=False
             self.hint.set("选中一行，再试听，确认它是你要的主旋律。轨道和通道编号从0开始。")
             self.result_text.set("读取完成，请选择一条旋律。")
-            self.status.set("读取完成：%d个轨道/通道候选。" % len(self.rows))
-            if preset:
-                recipe=preset[2]
-                iid="%d:%d"%(recipe["track"],recipe["channel"])
-                self.tree.selection_set(iid); self.tree.see(iid)
-                # Consume the queued selection event before applying preset fields.
-                self.root.after_idle(lambda: self.apply_preset(preset[0],recipe))
-        self._run("正在读取并检查 MIDI…",read,loaded)
+            adjusted=len(inspection["tempo_adjustments"])
+            self.status.set("读取完成：%d个轨道/通道候选。" % len(self.rows) +
+                ("已按120 BPM读取，原速度图已忽略。" if self.score.tempo.conflict_policy=="fixed-120" else
+                 "已兼容%d处重复速度。" % adjusted if adjusted else ""))
+        self._run("正在读取并检查 MIDI…",read,loaded,song_load=True,operation="load_midi")
 
-    def apply_preset(self, variant, recipe):
-        if self.busy or not self.score:
+    def _dismiss_range(self):
+        if self.range_dialog is not None and self.range_dialog.exists(): self.range_dialog.close()
+        if self.recovery_dialog is not None and self.recovery_dialog.winfo_exists(): self.recovery_dialog.destroy()
+        self.range_dialog=None
+        self.recovery_dialog=None
+        self._range_pending=None
+
+    def _show_recovery(self, message, actions):
+        if self.recovery_dialog is not None and self.recovery_dialog.winfo_exists():
+            self.recovery_dialog.destroy()
+        window=tk.Toplevel(self.root)
+        self.recovery_dialog=window
+        window.title("选择处理方式，继续生成")
+        window.transient(self.root)
+        frame=ttk.Frame(window,padding=16)
+        frame.pack(fill="both",expand=True)
+        ttk.Label(frame,text=message,wraplength=440,justify="left").pack(fill="x",pady=(0,12))
+        self.recovery_actions={}
+        for label,callback in actions:
+            def run(action=callback):
+                window.destroy()
+                action()
+            button=ttk.Button(frame,text=label,command=run)
+            button.pack(fill="x",pady=3)
+            self.recovery_actions[label]=button
+        ttk.Button(frame,text="返回调整",command=window.destroy).pack(anchor="e",pady=(10,0))
+
+    def _set_and_generate(self, variable, value):
+        variable.set(value)
+        self.generate()
+
+    def _conversion_recovery(self, error):
+        actions=[]
+        if error.kind in ("tempo","tempo_invalid"):
+            file=self.file.get()
+            if error.kind=="tempo":
+                actions=[("采用最后一条速度并重新打开",lambda:self.load_file(file,"last")),
+                         ("采用第一条速度并重新打开",lambda:self.load_file(file,"first"))]
+            actions.append(("按120 BPM读取（忽略原速度图）",lambda:self.load_file(file,"fixed-120")))
+        else:
+            current=POLYPHONY[self.polyphony.get()]
+            if error.kind in ("polyphony","overlap","range","timing"):
+                for label,policy in (("全部取最高音","highest"),("全部取最低音","lowest")):
+                    if policy!=current:
+                        actions.append((label+"并生成",lambda value=label:self._set_and_generate(self.polyphony,value)))
+            if error.kind in ("range","transpose"):
+                options=error.details.get("options",[])
+                if options:
+                    shift=min(options,key=lambda value:(abs(value),value))
+                    actions.insert(0,("整体移调 %+d 半音并生成"%shift,lambda:self._set_and_generate(self.transpose,str(shift))))
+                actions.insert(0,("拖动时间轴，试听并选择可演奏片段",self.open_range))
+            if error.kind=="overlap":
+                actions.append(("缩短重叠部分并生成",lambda:self._set_and_generate(self.overlap,next(label for label,value in OVERLAP.items() if value=="trim"))))
+            if error.kind=="expression":
+                actions=[("忽略弯音和踏板效果并生成",lambda:self._set_and_generate(self.ignore_expression,True)),
+                         ("选择不含这些效果的片段",self.open_range)]
+            if error.kind=="capacity":
+                actions=[("拖动选择较短的片段",self.open_range)]
+            if error.kind=="pitch_filter":
+                actions=[("上下拖动音域框或调整左右范围",self.open_range),
+                         ("取消音域框，重新调整",self.clear_pitch_filter)]
+            if error.kind=="pairing":
+                def valid_only():
+                    self.valid_notes_only=True
+                    self.generate()
+                actions=[("仅转换完整音符并生成（舍弃异常音符）",valid_only),
+                         ("重新选择MIDI文件",self.choose_file)]
+            if error.kind=="timing":
+                actions.append(("速度减半并生成",lambda:self._set_and_generate(self.speed,str(Fraction(self.speed.get())/2))))
+        self._show_recovery(str(error),actions)
+
+    def _reset_and_generate(self):
+        self.transpose.set("0"); self.speed.set("100"); self.countdown.set("3")
+        self.start.set(""); self.end.set("")
+        self.clear_pitch_filter()
+        self.generate()
+
+    def _safe_output_and_generate(self):
+        self.folder.set(str(ROOT/"out/gui"))
+        self.filename.set("melody")
+        self.generate()
+
+    def _choose_folder_and_generate(self):
+        folder=filedialog.askdirectory(parent=self.root,title="选择可写入的保存位置")
+        if folder:
+            self.folder.set(folder)
+            self.generate()
+
+    def open_range(self):
+        row=self.selection()
+        if self.busy or not self.score or not row or not row["notes"] or row["drum_channel"]:
             return
-        self._selected()
-        form=model.form_for_demo(self.score,recipe)
-        self.updating=True
-        for var,value in ((self.title,form.title),(self.transpose,form.transpose),(self.speed,form.speed_percent),
-                          (self.countdown,form.countdown_seconds),(self.start,form.start_beat),(self.end,form.end_beat)):
-            var.set(value)
-        self.polyphony.set(next(k for k,v in POLYPHONY.items() if v==form.polyphony))
-        self.overlap.set(next(k for k,v in OVERLAP.items() if v==form.overlap))
-        self.filename.set("queens_"+variant)
-        self.updating=False
-        self.result_text.set("示例设置已载入：整体升5半音，已明确选择八度叠音处理。点击“生成歌曲文件”即可。")
-        self.status.set("已载入《皇后大道东》"+("短版" if variant=="first" else "完整版")+"。")
-        self._refresh()
+        if self.range_dialog is not None and self.range_dialog.exists():
+            self.range_dialog.window.lift(); return
+        self.stop_audio()
+        try:
+            settings=model.settings(self.score,row["track"],row["channel"],self.get_form())
+            start=settings["start_tick"]
+            end=settings["end_tick"] or self.score.track_ends[row["track"]]
+            if not 0<=start<end<=self.score.track_ends[row["track"]]: raise ValueError()
+        except (ValueError,TypeError):
+            start,end=0,self.score.track_ends[row["track"]]
+        def apply(start,end,policy,options,pitch_min,pitch_max):
+            self.start.set(str(Fraction(start,self.score.ppq)))
+            self.end.set(str(Fraction(end,self.score.ppq)))
+            self.polyphony.set(policy)
+            self.pitch_min.set(str(pitch_min));self.pitch_max.set(str(pitch_max))
+            try: shift=int(self.transpose.get())
+            except ValueError: shift=0
+            if shift not in options:
+                shift=min(options,key=lambda value:(abs(value),value))
+                self.transpose.set(str(shift))
+            self.status.set("已选框内 %s–%s，框外音符将舍弃，整体移调 %+d 半音；可直接生成。"%
+                (engine.note_name(pitch_min),engine.note_name(pitch_max),shift))
+        try: pitch_min=int(self.pitch_min.get())
+        except ValueError: pitch_min=None
+        self.range_dialog=RangeDialog(self.root,self.score,row,POLYPHONY,self.polyphony.get(),start,end,
+            apply,self._range_preview,self.stop_audio,self._range_position,pitch_min)
+
+    def _range_position(self):
+        value=self.player.position_ms()
+        return None if value is None else value+self._range_offset_ms
+
+    def _range_preview(self, policy, start_ms, end_ms, pitch_min=None, pitch_max=None):
+        if self.busy:
+            if self.operation=="range_preview": self._range_pending=(policy,start_ms,end_ms,pitch_min,pitch_max)
+            return
+        if not self.score: return
+        row=self.selection()
+        if not row: return
+        score=self.score
+        dialog=self.range_dialog
+        self.stop_audio()
+        generation=self._audio_generation
+        key=(score.sha256,row["track"],row["channel"],policy,start_ms,end_ms,pitch_min,pitch_max)
+        def ready(file):
+            if dialog and dialog.exists() and generation==self._audio_generation:
+                self._range_offset_ms=start_ms
+                self._play(file,0,"正在试听所选位置（原音高）",end_ms-start_ms)
+        if self._range_cache and self._range_cache[0]==key:
+            ready(self._range_cache[1]); return
+        def build():
+            file=Path(self.preview_directory.name)/"range.mid"
+            file.write_bytes(engine.range_audition_bytes(score,row["track"],row["channel"],start_ms*1000,end_ms*1000,policy,pitch_min,pitch_max))
+            return file
+        def complete(file):
+            self._range_cache=(key,file)
+            pending=self._range_pending
+            self._range_pending=None
+            if pending and dialog and dialog.exists(): self._range_preview(*pending)
+            else: ready(file)
+        self._run("正在准备选段试听…",build,complete,operation="range_preview")
 
     def get_form(self):
         return model.Form(self.title.get(),self.transpose.get(),self.speed.get(),self.countdown.get(),
-            self.start.get(),self.end.get(),POLYPHONY[self.polyphony.get()],OVERLAP[self.overlap.get()],self.ignore_expression.get())
+            self.start.get(),self.end.get(),POLYPHONY[self.polyphony.get()],OVERLAP[self.overlap.get()],self.ignore_expression.get(),self.valid_notes_only,
+            self.pitch_min.get(),self.pitch_max.get())
 
     def generate(self):
         row=self.selection()
@@ -445,26 +742,32 @@ class ConverterWindow:
             if existing and not messagebox.askyesno("替换已有文件？","将替换：\n"+"\n".join(existing)+"\n\n是否继续？",parent=self.root):
                 return
         except Exception as error:
-            messagebox.showerror("请检查设置",str(error),parent=self.root)
+            self._show_recovery(str(error),[("恢复常用参数并重试",self._reset_and_generate),
+                ("拖动选择片段",self.open_range),("保存到项目输出目录并重试",self._safe_output_and_generate)])
             return
         self.stop_audio()
-        self.result=None
+        self._clear_song()
         score=self.score
         def convert():
             document,report=model.convert(score,row["track"],row["channel"],form)
             paths=engine.emit_conversion(score.source,document,report,output,force=bool(existing))
-            return paths,document,report
+            return paths,document,report,device.load_song(paths[0])
         def complete(value):
-            paths,document,report=value
+            paths,document,report,song=value
             self.result=paths
+            self.song=song
+            self.song_kind="midi"
             self.result_text.set(model.summary(document,report))
+            self.upload_status.set("歌曲已生成，可在“上传到 Pico”页签选择串口上传。")
             self.status.set("已保存："+str(paths[0]))
-        self._run("正在校验并生成歌曲、试听和处理报告…",convert,complete)
+        self._run("正在校验并生成歌曲、试听和处理报告…",convert,complete,operation="convert")
 
     def audition(self):
         row=self.selection()
         if self.busy or not self.score or not row or row["errors"] or row["drum_channel"]:
             return
+        self._dismiss_range()
+        self._range_offset_ms=0
         self.stop_audio()
         score=self.score
         def build():
@@ -475,20 +778,93 @@ class ConverterWindow:
         self._run("正在准备原轨试听…",build,lambda value:self._play(value[0],value[1],"正在试听原轨（原音高，从首音开始）"))
 
     def preview_result(self):
-        if self.result and not self.busy:
-            self._play(self.result[1],0,"正在试听转换结果")
+        if self.song and not self.busy:
+            self._dismiss_range()
+            song=self.song
+            self.stop_audio()
+            def build():
+                file=Path(self.preview_directory.name)/"current.mid"
+                file.write_bytes(preview_bytes(song.document)[0])
+                return file
+            self._run("正在从当前歌曲准备试听…",build,
+                      lambda file:self._play(file,0,"正在试听当前歌曲"))
 
-    def _play(self, file, start_ms, label):
+    def selected_port(self):
+        value=self.port.get().strip()
+        choice=self.port_choices.get(value)
+        return choice.device if choice else value
+
+    def _port_changed(self, *args):
+        if not self.busy:
+            self.upload_status.set("串口已更改，可读取设备状态或上传当前歌曲。")
+            self.progress.configure(value=0)
+        self._refresh()
+
+    def refresh_ports(self):
+        if self.busy:
+            return
+        previous=self.selected_port()
+        def refreshed(choices):
+            self.port_choices={choice.label:choice for choice in choices}
+            self.port_combo.configure(values=list(self.port_choices))
+            selected=next((choice for choice in choices if choice.device==previous),None)
+            preferred=[choice for choice in choices if choice.pico]
+            if selected is None and len(preferred)==1:
+                selected=preferred[0]
+            self.port.set(selected.label if selected else "")
+            self.status.set("找到 %d 个串口，请选择Pico配置端口。"%len(choices) if choices else
+                            "没有找到串口：请检查USB数据线、GP21–GND接线，再刷新。")
+        self._run("正在查找串口…",device.list_ports,refreshed)
+
+    def _report_upload_progress(self, stage, received, total):
+        self.events.put((None,(stage,received,total),None))
+
+    def _upload_progress(self, stage, received, total):
+        labels={"connect":"正在打开串口…","handshake":"正在识别Pico…",
+                "transfer":"正在传输：%d / %d 字节"%(received,total),"validate":"正在由Pico校验歌曲…",
+                "commit":"正在保存到Pico…","verify":"正在回读并核对保存结果…","done":"保存结果已核对。"}
+        percent={"connect":0,"handshake":0,"transfer":85*received/max(total,1),
+                 "validate":90,"commit":94,"verify":98,"done":100}.get(stage,0)
+        label=labels.get(stage,stage)
+        self.progress.configure(value=percent)
+        self.upload_status.set(label)
+        self.status.set(label)
+
+    def upload_song(self):
+        if self.busy or self.song is None or not self.selected_port():
+            return
+        song,port=self.song,self.selected_port()
+        self.stop_audio()
+        def complete(status):
+            self.progress.configure(value=100)
+            self.upload_status.set("上传成功，已回读核对。\n"+device.status_summary(status))
+            self.status.set("已保存到Pico。请断电取下GP21–GND跳线，再接Switch播放。")
+        self._run("正在连接Pico…",lambda:device.upload_song(song,port,self._report_upload_progress),
+                  complete,determinate=True)
+
+    def read_device_status(self):
+        if self.busy or not self.selected_port():
+            return
+        port=self.selected_port()
+        def complete(status):
+            self.upload_status.set(device.status_summary(status))
+            self.status.set("设备状态已读取。")
+        self._run("正在读取Pico保存状态…",lambda:device.device_status(port),complete)
+
+    def _play(self, file, start_ms, label, end_ms=None):
         try:
-            self.player.play(file,start_ms)
-            self.audio_status.set(label)
-            self.status.set(label)
+            started=self.player.play(file,start_ms,end_ms)
+            status=label if started is not False else "已到试听结尾，所选位置没有可播放内容；可向前拖动进度条。"
+            self.audio_status.set(status)
+            self.status.set(status)
         except Exception as error:
             self.audio_status.set("本机试听不可用")
             messagebox.showerror("试听未启动",str(error),parent=self.root)
         self._refresh()
 
     def stop_audio(self):
+        self._audio_generation+=1
+        self._range_pending=None
         try:
             self.player.stop()
         except RuntimeError:
@@ -517,7 +893,7 @@ class ConverterWindow:
             self._open(self.result[0].parent)
 
     def open_report(self):
-        if self.result:
+        if self.result and self.result[2]:
             self._open(self.result[2])
 
     def copy_result(self):
@@ -532,7 +908,7 @@ class ConverterWindow:
         def install():
             PRIVATE_DEPS.mkdir(parents=True,exist_ok=True)
             completed=subprocess.run([sys.executable,"-m","pip","install","--target",str(PRIVATE_DEPS),
-                "--upgrade","-r",str(ROOT/"tools/requirements-midi.txt"),"--disable-pip-version-check"],
+                "--upgrade","-r",str(ROOT/"tools/requirements-gui.txt"),"--disable-pip-version-check"],
                 stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors="replace",
                 creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
             if completed.returncode:
@@ -543,9 +919,10 @@ class ConverterWindow:
                 sys.path.insert(0,str(PRIVATE_DEPS))
             importlib.invalidate_caches()
             engine.require_mido()
+            device.require_serial()
             self.install_button.pack_forget()
-            self.status.set("组件已安装，可以打开 MIDI 或试用示例。")
-        self._run("正在安装转换组件到本工程（需要联网）…",install,installed)
+            self.status.set("组件已安装，可以转换MIDI、加载JSON并上传到Pico。")
+        self._run("正在安装转换与串口组件到本工程（需要联网）…",install,installed)
 
     def _callback_error(self, kind, error, tb):
         folder=ROOT/"out/gui"
@@ -557,11 +934,13 @@ class ConverterWindow:
     def close(self):
         if self.busy:
             self.closing=True
-            self.status.set("正在完成当前文件操作，随后自动关闭…")
+            self.status.set("正在完成当前操作，随后自动关闭…")
         else:
             self._destroy()
 
     def _destroy(self):
+        if self.range_dialog is not None and self.range_dialog.exists():
+            self.range_dialog.close()
         self.root.after_cancel(self._poll_id)
         self.stop_audio()
         self.preview_directory.cleanup()
