@@ -55,4 +55,4 @@ python tools/check_locales.py
 
 `PICO_OCARINA_LANG` can select a session language. `PICO_OCARINA_SETTINGS` can select a settings file. Otherwise the app saves the language under the user's application configuration directory.
 
-GitHub Actions builds the firmware and validator for `prod` and `prod-multi-lang`. Download the UF2 and checksum from the completed build's artifacts.
+GitHub Actions builds the firmware and validator for `main`, `prod` and `prod-multi-lang`. Download the UF2 and checksum from the completed build's artifacts.

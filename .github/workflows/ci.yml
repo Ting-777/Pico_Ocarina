@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [prod, prod-multi-lang]
+    branches: [main, prod, prod-multi-lang]
   pull_request:
-    branches: [prod, prod-multi-lang]
+    branches: [main, prod, prod-multi-lang]
   workflow_dispatch:
 
 permissions:
