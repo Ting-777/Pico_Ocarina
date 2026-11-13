@@ -1,4 +1,5 @@
 """Visual, audible MIDI range selection without manual beat arithmetic."""
+from i18n import tr, localized_combo
 from bisect import bisect_left
 from math import ceil
 import tkinter as tk
@@ -26,7 +27,7 @@ class RangeDialog:
         self.band_low = pitch_min
         self.updating_progress = False
         self.window = tk.Toplevel(parent)
-        self.window.title("拖动选择片段")
+        self.window.title(tr("拖动选择片段"))
         self.window.geometry("850x500")
         self.window.minsize(640, 400)
         self.window.transient(parent)
@@ -35,8 +36,9 @@ class RangeDialog:
         outer.pack(fill="both", expand=True)
         outer.columnconfigure(0, weight=1)
         outer.rowconfigure(1, weight=1)
-        ttk.Label(outer, text="左右拖蓝线选时间，松开后自动框住音符最多的18半音；绿框可上下拖动。\n框外音符会舍弃；点击定位或拖播放进度试听框内音符，按原速原音高。",
-                  justify="left").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        instructions = ttk.Label(outer, text=tr("左右拖蓝线选时间，松开后自动框住音符最多的18半音；绿框可上下拖动。\n框外音符会舍弃；点击定位或拖播放进度试听框内音符，按原速原音高。"),
+                  justify="left", width=1, wraplength=790)
+        instructions.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.canvas = tk.Canvas(outer, height=190, background="#18212d", highlightthickness=0)
         self.canvas.grid(row=1, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", lambda event: self.draw())
@@ -44,27 +46,31 @@ class RangeDialog:
         self.canvas.bind("<B1-Motion>", self.motion)
         self.canvas.bind("<ButtonRelease-1>", self.release)
         self.info = tk.StringVar()
-        ttk.Label(outer, textvariable=self.info, justify="left").grid(row=2, column=0, sticky="w", pady=8)
+        info_label = ttk.Label(outer, textvariable=self.info, justify="left", width=1, wraplength=790)
+        info_label.grid(row=2, column=0, sticky="ew", pady=8)
+        outer.bind("<Configure>", lambda event: (
+            instructions.configure(wraplength=max(200, event.width - 24)),
+            info_label.configure(wraplength=max(200, event.width - 24))))
         mode = ttk.Frame(outer)
         mode.grid(row=3, column=0, sticky="ew")
         mode.columnconfigure(1, weight=1)
-        ttk.Label(mode, text="多音取舍").grid(row=0, column=0, padx=(0, 8))
+        ttk.Label(mode, text=tr("多音取舍")).grid(row=0, column=0, padx=(0, 8))
         self.policy = tk.StringVar(value=policy)
-        self.policy_combo = ttk.Combobox(mode, textvariable=self.policy, values=list(choices), state="readonly", width=21)
+        self.policy_combo = localized_combo(mode, self.policy, list(choices), state="readonly", width=21)
         self.policy_combo.grid(row=0, column=1, sticky="w")
-        self.policy_combo.bind("<<ComboboxSelected>>", lambda event: (self.stop(),self.analyze()))
-        automatic=ttk.Menubutton(mode,text="自动选择 ▾")
+        self.policy_combo.bind("<<ComboboxSelected>>", lambda event: (self.stop(),self.analyze()), add=True)
+        automatic=ttk.Menubutton(mode,text=tr("自动选择 ▾"))
         menu=tk.Menu(automatic,tearoff=False)
-        menu.add_command(label="音区：框住最多音符",command=self.auto_band)
-        menu.add_command(label="时间：寻找可演奏片段",command=self.auto_range)
+        menu.add_command(label=tr("音区：框住最多音符"),command=self.auto_band)
+        menu.add_command(label=tr("时间：寻找可演奏片段"),command=self.auto_range)
         automatic.configure(menu=menu)
         automatic.grid(row=0,column=2,padx=6)
-        ttk.Button(mode, text="放大选区", command=self.zoom).grid(row=0, column=3)
-        ttk.Button(mode, text="全曲", command=self.full_view).grid(row=0, column=4, padx=(6, 0))
+        ttk.Button(mode, text=tr("放大选区"), command=self.zoom).grid(row=0, column=3)
+        ttk.Button(mode, text=tr("全曲"), command=self.full_view).grid(row=0, column=4, padx=(6, 0))
         progress = ttk.Frame(outer)
         progress.grid(row=4, column=0, sticky="ew", pady=10)
         progress.columnconfigure(1, weight=1)
-        ttk.Label(progress, text="播放位置").grid(row=0, column=0, padx=(0, 8))
+        ttk.Label(progress, text=tr("播放位置")).grid(row=0, column=0, padx=(0, 8))
         self.progress = tk.DoubleVar(value=self.cursor_us / 1000000)
         self.scale = ttk.Scale(progress, from_=0, to=max(.001, self.total_us / 1000000),
                                variable=self.progress, command=self.seek)
@@ -73,12 +79,12 @@ class RangeDialog:
         self.scale.bind("<ButtonRelease-1>", self.finish_seek)
         buttons = ttk.Frame(outer)
         buttons.grid(row=5, column=0, sticky="ew")
-        ttk.Button(buttons, text="试听选段", command=self.play_selection).pack(side="left")
-        ttk.Button(buttons, text="从光标试听", command=self.play_cursor).pack(side="left", padx=6)
-        ttk.Button(buttons, text="停止", command=self.stop).pack(side="left")
-        self.apply_button = ttk.Button(buttons, text="使用此片段", command=self.use, style="Accent.TButton")
+        ttk.Button(buttons, text=tr("试听选段"), command=self.play_selection).pack(side="left")
+        ttk.Button(buttons, text=tr("从光标试听"), command=self.play_cursor).pack(side="left", padx=6)
+        ttk.Button(buttons, text=tr("停止"), command=self.stop).pack(side="left")
+        self.apply_button = ttk.Button(buttons, text=tr("使用此片段"), command=self.use, style="Accent.TButton")
         self.apply_button.pack(side="right")
-        ttk.Button(buttons, text="取消", command=self.close).pack(side="right", padx=6)
+        ttk.Button(buttons, text=tr("取消"), command=self.close).pack(side="right", padx=6)
         self.source_notes = score.channels[(self.track, self.channel)].notes
         pitches=[note.pitch for note in self.source_notes] or [71,89]
         self.pitch_axis=max(0,min(pitches)-18),min(127,max(pitches)+18)
@@ -112,19 +118,19 @@ class RangeDialog:
         self.inside_count,self.outside_count=inside,len(raw)-inside
         options = self.analysis["transpose_options"]
         span = self.analysis["range"]
-        times = "%s — %s，时长 %s" % (clock_text(self.score.tempo.at(self.start_tick)),
+        times = tr("%s — %s，时长 %s") % (clock_text(self.score.tempo.at(self.start_tick)),
             clock_text(self.score.tempo.at(self.end_tick)), clock_text(self.score.tempo.at(self.end_tick) - self.score.tempo.at(self.start_tick)))
         if not span:
-            text = "框内没有音符，请上下拖动绿框，或调整左右时间范围。"
+            text = tr("框内没有音符，请上下拖动绿框，或调整左右时间范围。")
         elif self.analysis["notes"]>4096:
-            text = "所选范围超过4096音，请缩小范围或自动找片段。"
+            text = tr("所选范围超过4096音，请缩小范围或自动找片段。")
             options = []
         elif not options:
-            text = "音域 %s–%s（跨度%d半音），超过18；请缩小范围或改选取高/低音。" % (engine.note_name(span[0]), engine.note_name(span[1]), span[1] - span[0])
+            text = tr("音域 %s–%s（跨度%d半音），超过18；请缩小范围或改选取高/低音。") % (engine.note_name(span[0]), engine.note_name(span[1]), span[1] - span[0])
         else:
             shift = min(options, key=lambda value: (abs(value), value))
-            text = "框内%d音，排除%d音；多音取舍后%d音，建议整体移调 %+d 半音。" % (inside,len(raw)-inside,self.analysis["notes"],shift)
-        self.info.set(times + "；18半音框 %s–%s\n" % (engine.note_name(self.band_low),engine.note_name(self.band_low+18)) + text)
+            text = tr("框内%d音，排除%d音；多音取舍后%d音，建议整体移调 %+d 半音。") % (inside,len(raw)-inside,self.analysis["notes"],shift)
+        self.info.set(times + tr("；18半音框 %s–%s\n") % (engine.note_name(self.band_low),engine.note_name(self.band_low+18)) + text)
         self.apply_button.state(["!disabled"] if options else ["disabled"])
         self.draw()
 
@@ -161,7 +167,7 @@ class RangeDialog:
         for pitch,label_y in ((self.band_low,bottom+9),(self.band_low+18,top-9)):
             c.create_text(min(c.winfo_width()-18,max(90,right-10)),label_y,text=engine.note_name(pitch),
                 anchor="e",fill="#71f0c7",tags="pitch_label")
-        for tick, label in ((self.start_tick, "开始"), (self.end_tick, "结束")):
+        for tick, label in ((self.start_tick, tr("开始")), (self.end_tick, tr("结束"))):
             x = self.x(self.score.tempo.at(tick))
             c.create_rectangle(x-5, 0, x+5, height-22, fill="#3c9bdc", outline="", tags=label)
             c.create_text(x, height-12, text=label, fill="white", tags=label)

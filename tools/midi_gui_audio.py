@@ -1,4 +1,5 @@
 """Windows MIDI sequencer adapter."""
+from i18n import tr
 import ctypes
 import os
 from pathlib import Path
@@ -18,7 +19,7 @@ class MidiPlayer:
 
     def _command(self, text):
         if os.name != "nt":
-            raise RuntimeError("内置试听仅支持Windows；可以导出试听MIDI，用自己的播放器打开")
+            raise RuntimeError(tr("内置试听仅支持Windows；可以导出试听MIDI，用自己的播放器打开"))
         if self._api is None:
             self._api = ctypes.WinDLL("winmm")
             self._api.mciSendStringW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_void_p]
@@ -30,7 +31,7 @@ class MidiPlayer:
         if error:
             detail = ctypes.create_unicode_buffer(256)
             self._api.mciGetErrorStringW(error, detail, len(detail))
-            raise RuntimeError("MIDI试听失败：%s（%d）" % (detail.value, error))
+            raise RuntimeError(tr("MIDI试听失败：%s（%d）") % (detail.value, error))
         return result.value.strip()
 
     def play(self, file, start_ms=0, end_ms=None):
@@ -39,10 +40,10 @@ class MidiPlayer:
         if end_ms is not None:
             end_ms = int(end_ms)
             if end_ms <= start_ms:
-                raise ValueError("试听结束必须在开始之后")
+                raise ValueError(tr("试听结束必须在开始之后"))
         file = str(Path(file).resolve())
         if '"' in file or "\n" in file or "\r" in file:
-            raise ValueError("试听文件路径包含非法字符")
+            raise ValueError(tr("试听文件路径包含非法字符"))
         self._command('open "%s" type sequencer alias %s' % (file, self.alias))
         self.opened = True
         self._observed_playing = False
@@ -102,7 +103,7 @@ class MidiPlayer:
             if time.monotonic() - self._last_active < self.START_TIMEOUT:
                 return True
             self.stop()
-            raise RuntimeError("Windows MIDI播放器未能启动，请检查系统音频输出后重试。")
+            raise RuntimeError(tr("Windows MIDI播放器未能启动，请检查系统音频输出后重试。"))
         self.stop()
         return False
 

@@ -1,42 +1,47 @@
 # Pico Ocarina
 
-用 **Raspberry Pi Pico（RP2040）** 模拟Switch有线手柄，自动演奏陶笛。歌曲保存在板上，播放时连接Switch即可。
+**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
-包含固件、Windows歌曲管理器和MIDI转换工具。默认歌曲为《友谊地久天长》，56音、42.8秒，播放前倒数3秒。
+Use a **Raspberry Pi Pico (RP2040)** as a wired Switch controller to play ocarina songs. Songs are stored on the board; connect it to the Switch to play.
 
-## 快速开始
+Includes firmware, a Windows song manager and MIDI conversion tools. The built-in song is **Auld Lang Syne**: 56 notes, 42.8 seconds and a separate 3-second count-in.
 
-1. [下载固件](firmware/Pico_Ocarina.uf2)，按住BOOTSEL连接电脑，将UF2拖入RPI-RP2磁盘。
-2. 将Pico连接Switch，进入陶笛演奏界面，短按BOOTSEL开始；再次短按停止。
-3. 换歌时双击 [启动转换器.cmd](启动转换器.cmd)，加载JSON或转换MIDI，再上传到Pico。
+## Quick start
 
-详细步骤见 [开始使用](开始使用.md)。
+1. [Download the firmware](firmware/Pico_Ocarina.uf2). Hold BOOTSEL while connecting the Pico to your PC, then copy the UF2 to the RPI-RP2 drive.
+2. Connect the Pico to the Switch and open the game's ocarina screen. Tap BOOTSEL to start or stop playback.
+3. To change songs, open [Launch.cmd](Launch.cmd), load a JSON song or convert a MIDI, then upload it to the Pico.
 
-## 按键
+See [Getting started](docs/GettingStarted.md) for wiring and upload instructions.
 
-| 操作 | 功能 |
+## Controls
+
+| Action | Function |
 |---|---|
-| 短按BOOTSEL | 开始或停止播放 |
-| 待机长按BOOTSEL约1秒 | 两次L+R，再按A，完成手柄识别流程 |
-| 连接GP21与GND后上电 | 进入电脑配置模式，上传歌曲 |
-| GP22接按钮至GND | 可选外接播放按钮，与BOOTSEL功能相同 |
+| Tap BOOTSEL | Start or stop playback |
+| Hold BOOTSEL for about 1 second while idle | Send L+R twice, then A, to complete controller recognition |
+| Power on with GP21 connected to GND | Enter PC configuration mode for song upload |
+| Optional button between GP22 and GND | Same playback controls as BOOTSEL |
 
-## 歌曲管理器
+## Song manager
 
-- 打开MIDI，选择轨道和通道，支持取最高音或最低音。
-- 拖动时间范围和18半音音域框，定位试听、调整音区。
-- 生成JSON、试听MIDI和处理报告，或直接加载已有JSON。
-- 选择串口上传歌曲，并读取板上保存状态。
+- **English, Japanese and Simplified Chinese.** Choose Language in the window; your selection is saved. The first launch follows your system language, with English as the fallback.
+- Select a MIDI track/channel, choose the highest or lowest voice, and preview it.
+- Drag time handles and an 18-semitone pitch window to choose a passage.
+- Export song JSON, preview MIDI and a conversion report, or load an existing JSON directly.
+- Upload through a serial port and verify the saved song by reading it back.
 
-Windows需安装Python 3.9或更新版本，并包含Tcl/Tk。依赖可在窗口中安装，也可运行：
+On Windows, install Python 3.9 or newer with Tcl/Tk. Open [Launch.cmd](Launch.cmd) or [PicoOcarina.pyw](PicoOcarina.pyw). Components can be installed from the window or with:
 
 ```powershell
 python -m pip install -r tools/requirements-gui.txt
 ```
 
-## 文档
+The GUI language does not alter loaded JSON files, song pitches, timing or uploaded bytes. Built-in MIDI preview uses Windows; exported MIDI files can be opened in another player.
 
-- [开始使用](开始使用.md)：刷入、播放、上传和常见问题。
-- [MIDI转换与歌曲格式](docs/MIDI转换.md)：选声部、命令行和JSON字段。
-- [构建](docs/构建.md)：从源码生成UF2和桌面校验工具。
-- [第三方许可](THIRD_PARTY.md)。项目代码采用 [MIT许可](LICENSE)。
+## Documentation
+
+- [Getting started](docs/GettingStarted.md): flashing, playback, upload and troubleshooting.
+- [MIDI conversion and song format](docs/MIDIConversion.md): voice selection, CLI options and JSON fields.
+- [Building](docs/Building.md): firmware and desktop validator builds.
+- [Third-party notices](THIRD_PARTY.md). Project code is licensed under [MIT](LICENSE).

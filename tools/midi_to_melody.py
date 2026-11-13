@@ -1,4 +1,5 @@
 """Inspect MIDI tracks and convert one selected melody to the Pico melody-v1 JSON."""
+from i18n import tr
 import argparse
 from bisect import bisect_right
 from collections import defaultdict
@@ -28,7 +29,7 @@ def require_mido():
         import mido
         return mido
     except ImportError as error:
-        raise MelodyError("请先运行 python -m pip install -r tools/requirements-midi.txt") from error
+        raise MelodyError(tr("请先运行 python -m pip install -r tools/requirements-midi.txt")) from error
 
 class ConversionIssue(MelodyError):
     def __init__(self, kind, message, **details):
@@ -53,14 +54,14 @@ class Channel:
 class TempoMap:
     def __init__(self, ppq, changes, conflict_policy="error"):
         if conflict_policy not in ("error", "first", "last", "fixed-120"):
-            raise MelodyError("不支持的速度冲突处理方式")
+            raise MelodyError(tr("不支持的速度冲突处理方式"))
         self.conflict_policy = conflict_policy
         self.ppq = ppq
         points = {0: 500000}
         grouped = defaultdict(list)
         for tick, tempo in changes:
             if tempo <= 0 and conflict_policy!="fixed-120":
-                raise ConversionIssue("tempo_invalid", "MIDI速度必须大于0；可明确选择按120 BPM读取")
+                raise ConversionIssue("tempo_invalid", tr("MIDI速度必须大于0；可明确选择按120 BPM读取"))
             grouped[tick].append(tempo)
         self.adjustments = []
         for tick, tempos in sorted(grouped.items()):
@@ -72,7 +73,7 @@ class TempoMap:
                 continue
             conflict = (high - low) * TEMPO_DUPLICATE_TOLERANCE_DENOMINATOR > low
             if conflict and conflict_policy == "error":
-                raise ConversionIssue("tempo", "tick %d 有冲突的速度事件，请选择采用第一条或最后一条速度" % tick,
+                raise ConversionIssue("tempo", tr("tick %d 有冲突的速度事件，请选择采用第一条或最后一条速度") % tick,
                                       tick=tick, tempos=tempos)
             # Match ordered MIDI playback for near-identical simultaneous
             # events: the last event sets the tempo. Bound the whole group so
@@ -114,15 +115,15 @@ def read_score(source, tempo_policy="error"):
     with source.open("rb") as file:
         raw = file.read(MAX_MIDI_BYTES + 1)
     if len(raw) > MAX_MIDI_BYTES:
-        raise MelodyError("MIDI超过16MiB，请先拆分")
+        raise MelodyError(tr("MIDI超过16MiB，请先拆分"))
     try:
         midi = mido.MidiFile(file=io.BytesIO(raw), clip=False)
     except (EOFError, ValueError, KeyError, OSError) as error:
-        raise MelodyError("无法解析MIDI: %s" % error) from error
+        raise MelodyError(tr("无法解析MIDI: %s") % error) from error
     if midi.type not in (0, 1):
-        raise MelodyError("支持MIDI类型0/1；请将类型2文件另存为类型0/1")
+        raise MelodyError(tr("支持MIDI类型0/1；请将类型2文件另存为类型0/1"))
     if midi.ticks_per_beat <= 0:
-        raise MelodyError("请将SMPTE文件另存为PPQ时间制")
+        raise MelodyError(tr("请将SMPTE文件另存为PPQ时间制"))
     channels, names, ends, changes = {}, [], [], []
     event_count = 0
     for track_index, track in enumerate(midi.tracks):
@@ -132,7 +133,7 @@ def read_score(source, tempo_policy="error"):
         for order, message in enumerate(track):
             event_count += 1
             if event_count > MAX_MIDI_EVENTS:
-                raise MelodyError("MIDI事件超过500000，请先拆分")
+                raise MelodyError(tr("MIDI事件超过500000，请先拆分"))
             tick += message.time
             if message.type == "set_tempo":
                 changes.append((tick, message.tempo))
@@ -148,19 +149,19 @@ def read_score(source, tempo_policy="error"):
             pitch_key = (message.channel, message.note)
             if message.type == "note_on" and message.velocity:
                 if pitch_key in active:
-                    channel.errors.append("tick %d: 音高%d尚未结束就再次起音" % (tick, message.note))
+                    channel.errors.append(tr("tick %d: 音高%d尚未结束就再次起音") % (tick, message.note))
                 else:
                     active[pitch_key] = (tick, message.velocity, order)
             else:
                 start = active.pop(pitch_key, None)
                 if start is None:
-                    channel.errors.append("tick %d: 音高%d没有对应起音" % (tick, message.note))
+                    channel.errors.append(tr("tick %d: 音高%d没有对应起音") % (tick, message.note))
                 elif start[0] >= tick:
-                    channel.errors.append("tick %d: 音高%d时长不为正" % (tick, message.note))
+                    channel.errors.append(tr("tick %d: 音高%d时长不为正") % (tick, message.note))
                 else:
                     channel.notes.append(Note(start[0], tick, message.note, start[1], start[2]))
         for (channel_index, pitch), start in active.items():
-            channels[(track_index, channel_index)].errors.append("tick %d: 音高%d缺少结束事件" % (start[0], pitch))
+            channels[(track_index, channel_index)].errors.append(tr("tick %d: 音高%d缺少结束事件") % (start[0], pitch))
         ends.append(tick)
     for channel in channels.values():
         channel.notes.sort(key=lambda note: (note.on, note.source_index))
@@ -224,7 +225,7 @@ def pitch_filter_bounds(pitch_min=None, pitch_max=None):
         return None
     if (type(pitch_min) is not int or type(pitch_max) is not int or
             not 0 <= pitch_min <= pitch_max <= 127):
-        raise MelodyError("音域框上下限须为0–127的整数，且下限不能大于上限")
+        raise MelodyError(tr("音域框上下限须为0–127的整数，且下限不能大于上限"))
     return pitch_min, pitch_max
 
 def selection_notes(score, track, channel, start_tick=0, end_tick=None, polyphony="error",
@@ -266,7 +267,7 @@ def suggest_range(score, track, channel, polyphony="highest"):
     policy = polyphony if polyphony in ("highest", "lowest") else "highest"
     notes = selection_notes(score, track, channel, polyphony=policy)
     if not notes:
-        raise MelodyError("所选轨道没有可选音符")
+        raise MelodyError(tr("所选轨道没有可选音符"))
     low, high = deque(), deque()
     left, best = 0, (0, notes[0].off, notes[0].on)
     for right, note in enumerate(notes):
@@ -318,7 +319,7 @@ def audition_bytes(score, track, channel_index, polyphony=None):
     mido = require_mido()
     channel = score.channels[(track, channel_index)]
     if channel.errors:
-        raise MelodyError("不能导出有配对错误的轨道试听")
+        raise MelodyError(tr("不能导出有配对错误的轨道试听"))
     midi = mido.MidiFile(type=1, ticks_per_beat=score.ppq, charset="utf-8")
     conductor, voice = mido.MidiTrack(), mido.MidiTrack()
     midi.tracks.extend([conductor, voice])
@@ -350,7 +351,7 @@ def range_audition_bytes(score, track, channel_index, start_us, end_us, polyphon
                          pitch_min=None, pitch_max=None):
     """Audition a clipped range from zero, including a note held at the cursor."""
     if not 0 <= start_us < end_us:
-        raise MelodyError("试听范围必须有正时长")
+        raise MelodyError(tr("试听范围必须有正时长"))
     mido = require_mido()
     midi = mido.MidiFile(type=0, ticks_per_beat=PREVIEW_PPQ)
     voice = mido.MidiTrack([mido.MetaMessage("set_tempo", tempo=PREVIEW_TEMPO)])
@@ -410,36 +411,36 @@ def convert_score(score, *, track, channel=None, start_tick=0, end_tick=None, tr
                   title=None, countdown_us=3000000, release_us=PLAYBACK_RELEASE_US, valid_notes_only=False,
                   pitch_min=None, pitch_max=None):
     if type(track) is not int or not 0 <= track < len(score.track_names):
-        raise MelodyError("轨道不存在，请先inspect；轨道编号从0开始")
+        raise MelodyError(tr("轨道不存在，请先inspect；轨道编号从0开始"))
     candidates = [index for candidate_track, index in score.channels
                   if candidate_track == track and (score.channels[(track, index)].notes or score.channels[(track, index)].errors)]
     if channel is None:
         if len(candidates) != 1:
-            raise MelodyError("此轨有%d个通道，请用--channel明确选择（从0开始）" % len(candidates))
+            raise MelodyError(tr("此轨有%d个通道，请用--channel明确选择（从0开始）") % len(candidates))
         channel = candidates[0]
     if type(channel) is not int or not 0 <= channel <= 15:
-        raise MelodyError("通道编号必须是0–15的整数")
+        raise MelodyError(tr("通道编号必须是0–15的整数"))
     if (track, channel) not in score.channels:
-        raise MelodyError("所选轨道/通道不存在")
+        raise MelodyError(tr("所选轨道/通道不存在"))
     if channel == 9:
-        raise MelodyError("请选择旋律通道；通道9为GM鼓通道")
+        raise MelodyError(tr("请选择旋律通道；通道9为GM鼓通道"))
     selected = score.channels[(track, channel)]
     if selected.errors and not valid_notes_only:
-        raise ConversionIssue("pairing", "音符配对错误: " + "; ".join(selected.errors[:3]) + "。可只转换已完整配对的音符。")
+        raise ConversionIssue("pairing", tr("音符配对错误: ") + "; ".join(selected.errors[:3]) + tr("。可只转换已完整配对的音符。"))
     if end_tick is None:
         end_tick = score.track_ends[track]
     if type(start_tick) is not int or type(end_tick) is not int or not 0 <= start_tick < end_tick:
-        raise MelodyError("片段要求 0 <= start < end，单位为tick")
+        raise MelodyError(tr("片段要求 0 <= start < end，单位为tick"))
     if end_tick > score.track_ends[track]:
-        raise MelodyError("片段结束超过所选轨道结尾")
+        raise MelodyError(tr("片段结束超过所选轨道结尾"))
     speed = Fraction(str(speed)) if not isinstance(speed, Fraction) else speed
     if speed <= 0:
-        raise MelodyError("速度倍率必须大于0")
+        raise MelodyError(tr("速度倍率必须大于0"))
     if polyphony not in ("error", "octave-highest", "highest", "lowest") or overlap not in ("error", "trim"):
-        raise MelodyError("不支持的复音或重叠处理规则")
+        raise MelodyError(tr("不支持的复音或重叠处理规则"))
     expression = _expression(selected, start_tick, end_tick)
     if expression and not ignore_expression:
-        raise ConversionIssue("expression", "片段含弯音或延音踏板，可选择忽略这些效果后生成")
+        raise ConversionIssue("expression", tr("片段含弯音或延音踏板，可选择忽略这些效果后生成"))
     bounds = pitch_filter_bounds(pitch_min, pitch_max)
     groups, clipped, pitch_excluded = defaultdict(list), [], []
     source_count = 0
@@ -458,8 +459,8 @@ def convert_score(score, *, track, channel=None, start_tick=0, end_tick=None, tr
         groups[on].append(Note(on, off, note.pitch, note.velocity, note.source_index))
     if not groups:
         if bounds is not None:
-            raise ConversionIssue("pitch_filter", "音域框内没有音符，请上下拖动音域框或调整左右范围")
-        raise MelodyError("所选片段没有音符")
+            raise ConversionIssue("pitch_filter", tr("音域框内没有音符，请上下拖动音域框或调整左右范围"))
+        raise MelodyError(tr("所选片段没有音符"))
     notes, omitted = [], []
     selection = None
     select_active = polyphony in ("highest", "lowest")
@@ -469,9 +470,9 @@ def convert_score(score, *, track, channel=None, start_tick=0, end_tick=None, tr
     for onset, group in ([] if select_active else sorted(groups.items())):
         if len(group) > 1:
             if polyphony == "error":
-                raise ConversionIssue("polyphony", "tick %d 同时有多个音，可选择全部取最高音或最低音" % onset)
+                raise ConversionIssue("polyphony", tr("tick %d 同时有多个音，可选择全部取最高音或最低音") % onset)
             if len({note.pitch % 12 for note in group}) != 1:
-                raise ConversionIssue("polyphony", "tick %d 不是纯八度叠音，请改用全部取最高音或最低音" % onset)
+                raise ConversionIssue("polyphony", tr("tick %d 不是纯八度叠音，请改用全部取最高音或最低音") % onset)
             chosen = max(group, key=lambda note: note.pitch)
             for note in group:
                 if note is not chosen:
@@ -482,11 +483,11 @@ def convert_score(score, *, track, channel=None, start_tick=0, end_tick=None, tr
         notes.append(chosen)
     for previous, following in zip(notes, notes[1:]):
         if previous.off > following.on and overlap == "error":
-            raise ConversionIssue("overlap", "tick %d 与前音重叠，可取最高/最低音，或缩短重叠部分" % following.on)
+            raise ConversionIssue("overlap", tr("tick %d 与前音重叠，可取最高/最低音，或缩短重叠部分") % following.on)
     options = shift_options(notes)
     if type(transpose) is not int or transpose not in options:
-        suggestion = "%d..%d" % (options[0], options[-1]) if options else "无：所选旋律跨度超过18半音"
-        raise ConversionIssue("transpose" if options else "range", "移调后超出B4–F6；可用的整段移调范围为 " + suggestion,
+        suggestion = "%d..%d" % (options[0], options[-1]) if options else tr("无：所选旋律跨度超过18半音")
+        raise ConversionIssue("transpose" if options else "range", tr("移调后超出B4–F6；可用的整段移调范围为 ") + suggestion,
                               options=options)
     # Anchor the selected melody to its first retained note, not the beginning
     # of the track/selection. Subtract exact tempo-map time before rounding.
@@ -511,7 +512,7 @@ def convert_score(score, *, track, channel=None, start_tick=0, end_tick=None, tr
             off = min(original_off, next_on - RELEASE_US)
         selection_shifts.append(inserted_rest)
         if off <= on:
-            raise ConversionIssue("timing", "第%d音（源tick %d）容不下正音长和40ms松键，可保留音长并增加间隔，或放慢速度" % (index, note.on))
+            raise ConversionIssue("timing", tr("第%d音（源tick %d）容不下正音长和40ms松键，可保留音长并增加间隔，或放慢速度") % (index, note.on))
         rows.append([on, off, note.pitch + transpose])
         if off != original_off:
             shortened.append({"note_index": index, "source_index": note.source_index,
@@ -519,7 +520,7 @@ def convert_score(score, *, track, channel=None, start_tick=0, end_tick=None, tr
                               "shortened_us": original_off - off})
     title = score.source.stem[:80] if title is None else title
     if len(rows)>MAX_NOTES or duration+inserted_rest>MAX_DURATION:
-        raise ConversionIssue("capacity", "所选片段超过4096音或60分钟上限，请拖动选择较短片段")
+        raise ConversionIssue("capacity", tr("所选片段超过4096音或60分钟上限，请拖动选择较短片段"))
     document = {
         "format": "pico-ocarina-melody", "schema_version": 1, "title": title,
         "fingering_profile": PROFILE, "countdown_us": countdown_us, "duration_us": duration + inserted_rest,
@@ -571,9 +572,9 @@ def convert_score(score, *, track, channel=None, start_tick=0, end_tick=None, tr
 def write_bundle(payloads, source=None, force=False):
     targets = [Path(file).resolve() for file, _ in payloads]
     if len(set(targets)) != len(targets) or (source is not None and Path(source).resolve() in targets):
-        raise MelodyError("输出文件不可重名，也不能覆盖源文件")
+        raise MelodyError(tr("输出文件不可重名，也不能覆盖源文件"))
     if not force and any(target.exists() for target in targets):
-        raise MelodyError("输出文件已存在；换一个输出名，或用--force明确覆盖")
+        raise MelodyError(tr("输出文件已存在；换一个输出名，或用--force明确覆盖"))
     staged = []
     try:
         for target, (_, data) in zip(targets, payloads):
@@ -607,7 +608,7 @@ def _tick(args, score, prefix):
         return 0 if prefix == "start" else None
     value = beat * score.ppq
     if value.denominator != 1:
-        raise MelodyError("拍点不在MIDI tick网格上；beat按从0开始的四分音符计数")
+        raise MelodyError(tr("拍点不在MIDI tick网格上；beat按从0开始的四分音符计数"))
     return int(value)
 
 def positive_fraction(value):
@@ -617,7 +618,7 @@ def positive_fraction(value):
             raise ValueError()
         return number
     except (ValueError, ZeroDivisionError):
-        raise argparse.ArgumentTypeError("请输入大于0的数，例如1、0.8或3/2")
+        raise argparse.ArgumentTypeError(tr("请输入大于0的数，例如1、0.8或3/2"))
 
 def beat_fraction(value):
     try:
@@ -626,18 +627,18 @@ def beat_fraction(value):
             raise ValueError()
         return result
     except (ValueError, ZeroDivisionError):
-        raise argparse.ArgumentTypeError("拍点必须是非负数字")
+        raise argparse.ArgumentTypeError(tr("拍点必须是非负数字"))
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="MIDI选轨、检查和转换为Pico歌曲JSON；轨道/通道均从0开始")
+    parser = argparse.ArgumentParser(description=tr("MIDI选轨、检查和转换为Pico歌曲JSON；轨道/通道均从0开始"))
     commands = parser.add_subparsers(dest="command", required=True)
-    inspect = commands.add_parser("inspect", help="列出轨道/通道，并可导出原轨试听")
+    inspect = commands.add_parser("inspect", help=tr("列出轨道/通道，并可导出原轨试听"))
     inspect.add_argument("input", type=Path)
     inspect.add_argument("--json", action="store_true")
     inspect.add_argument("--audition-dir", type=Path)
     inspect.add_argument("--force", action="store_true")
     inspect.add_argument("--tempo-policy", choices=("error", "first", "last", "fixed-120"), default="error")
-    convert = commands.add_parser("convert", help="明确选择旋律后转换")
+    convert = commands.add_parser("convert", help=tr("明确选择旋律后转换"))
     convert.add_argument("input", type=Path)
     convert.add_argument("--track", type=int, required=True)
     convert.add_argument("--channel", type=int, choices=range(16))
@@ -646,21 +647,21 @@ def main(argv=None):
         group.add_argument("--" + prefix + "-tick", type=int)
         group.add_argument("--" + prefix + "-beat", type=beat_fraction)
     convert.add_argument("--transpose", type=int, default=0)
-    convert.add_argument("--pitch-min", type=int, help="明确排除音域框外音符：MIDI音高下限，含边界")
-    convert.add_argument("--pitch-max", type=int, help="MIDI音高上限，须与--pitch-min同时填写")
+    convert.add_argument("--pitch-min", type=int, help=tr("明确排除音域框外音符：MIDI音高下限，含边界"))
+    convert.add_argument("--pitch-max", type=int, help=tr("MIDI音高上限，须与--pitch-min同时填写"))
     convert.add_argument("--speed", type=positive_fraction, default=Fraction(1))
     convert.add_argument("--polyphony", choices=("error", "octave-highest", "highest", "lowest"), default="error")
     convert.add_argument("--overlap", choices=("error", "trim"), default="error")
     convert.add_argument("--ignore-expression", action="store_true")
-    convert.add_argument("--valid-notes-only", action="store_true",help="明确丢弃配对异常，只转换完整音符")
+    convert.add_argument("--valid-notes-only", action="store_true",help=tr("明确丢弃配对异常，只转换完整音符"))
     convert.add_argument("--title")
     convert.add_argument("--countdown-us", type=int, default=3000000)
     convert.add_argument("--release-us", type=int, default=PLAYBACK_RELEASE_US,
-                         help="音间松键，默认120000微秒；保持每音长度并延后后续音")
+                         help=tr("音间松键，默认120000微秒；保持每音长度并延后后续音"))
     convert.add_argument("-o", "--output", type=Path, required=True)
     convert.add_argument("--force", action="store_true")
     convert.add_argument("--tempo-policy", choices=("error", "first", "last", "fixed-120"), default="error")
-    preview = commands.add_parser("preview", help="只从最终JSON重新生成试听MIDI")
+    preview = commands.add_parser("preview", help=tr("只从最终JSON重新生成试听MIDI"))
     preview.add_argument("input", type=Path)
     preview.add_argument("-o", "--output", type=Path, required=True)
     preview.add_argument("--force", action="store_true")
@@ -669,7 +670,7 @@ def main(argv=None):
         if args.command == "preview":
             data, info = preview_bytes(read_document(args.input))
             write_bundle([(args.output, data)], args.input, args.force)
-            print("试听已生成: %s；最大时间量化误差 %d 微秒" % (args.output, info["max_event_error_us"]))
+            print(tr("试听已生成: %s；最大时间量化误差 %d 微秒") % (args.output, info["max_event_error_us"]))
             return 0
         source = args.input
         score = read_score(source, args.tempo_policy)
@@ -679,7 +680,7 @@ def main(argv=None):
                 payloads = []
                 for row in result["candidates"]:
                     if row["errors"]:
-                        row["audition_skipped"] = "音符配对错误"
+                        row["audition_skipped"] = tr("音符配对错误")
                         continue
                     target = args.audition_dir / ("track_%d_channel_%d.mid" % (row["track"], row["channel"]))
                     payloads.append((target, audition_bytes(score, row["track"], row["channel"])))
@@ -688,18 +689,18 @@ def main(argv=None):
             if args.json:
                 print(json.dumps(result, ensure_ascii=True))
             else:
-                print("MIDI类型%d，PPQ=%d，%d条轨，%d个速度点；轨道/通道从0开始" %
+                print(tr("MIDI类型%d，PPQ=%d，%d条轨，%d个速度点；轨道/通道从0开始") %
                       (result["type"], result["ppq"], result["tracks"], result["tempo_points"]))
-                print("轨道 通道 音数 音域 同起音组 重叠起音 配对错误 名称")
+                print(tr("轨道 通道 音数 音域 同起音组 重叠起音 配对错误 名称"))
                 for row in result["candidates"]:
                     pitches = row["range"]
                     span = note_name(pitches[0]) + ".." + note_name(pitches[1]) if pitches else "-"
                     print("%4d %4d %4d %-10s %8d %8d %8d %s%s" %
                           (row["track"], row["channel"], row["notes"], span, row["simultaneous_groups"],
                            row["overlapping_onsets"], len(row["errors"]),
-                           json.dumps(row["name"], ensure_ascii=False), " [GM鼓]" if row["drum_channel"] else ""))
+                           json.dumps(row["name"], ensure_ascii=False), tr(" [GM鼓]") if row["drum_channel"] else ""))
                 if args.audition_dir:
-                    print("原轨试听目录: " + str(args.audition_dir))
+                    print(tr("原轨试听目录: ") + str(args.audition_dir))
             return 0
         document, report = convert_score(score, track=args.track, channel=args.channel,
             start_tick=_tick(args, score, "start"), end_tick=_tick(args, score, "end"),
@@ -711,19 +712,19 @@ def main(argv=None):
         paths = emit_conversion(source, document, report, output, args.force)
         selection=report["polyphony_selection"]
         changed=len(selection["changed_notes"]) if selection else len(report["omitted_notes"])
-        print("转换完成：%d音，%.4f秒；整体移调%+d半音；多音取舍涉及%d个源音" %
+        print(tr("转换完成：%d音，%.4f秒；整体移调%+d半音；多音取舍涉及%d个源音") %
               (len(document["notes"]), document["duration_us"] / 1000000,
                document["metadata"]["transpose_semitones_applied"], changed))
         if report["pitch_filter"]:
-            print("音域框 %s..%s，明确排除%d个源音；明细见处理报告。" %
+            print(tr("音域框 %s..%s，明确排除%d个源音；明细见处理报告。") %
                 (note_name(args.pitch_min),note_name(args.pitch_max),len(report["pitch_filter"]["excluded_notes"])))
-        print("音间松键%d毫秒，新增休止%.3f秒。" %
+        print(tr("音间松键%d毫秒，新增休止%.3f秒。") %
               (args.release_us // 1000, report["release_timing"]["added_rest_us"] / 1000000))
-        for label, target in zip(("上传歌曲", "试听MIDI", "处理报告"), paths):
+        for label, target in zip((tr("上传歌曲"), tr("试听MIDI"), tr("处理报告")), paths):
             print(label + ": " + str(target))
         return 0
     except (MelodyError, OSError, EOFError, ValueError) as error:
-        print("转换失败: " + str(error), file=sys.stderr)
+        print(tr("转换失败: ") + str(error), file=sys.stderr)
         return 1
 
 if __name__ == "__main__":

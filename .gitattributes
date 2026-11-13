@@ -1,5 +1,7 @@
 * text=auto
 *.json text eol=lf
+*.py text eol=lf
+*.pyw text eol=lf
 *.mid binary
 *.uf2 binary
 *.csv -text whitespace=cr-at-eol
